@@ -1,0 +1,263 @@
+import Link from "next/link";
+import {
+  ArrowRight, ArrowUpRight, Ban, BellRing, CircleCheck, Download, FileText, Hand, Lock, Radar as RadarIcon,
+  ScanSearch, ShieldCheck, Trophy, UserRound, Wallet,
+} from "lucide-react";
+import { getUser } from "@/lib/auth";
+import { EVENT_COLUMNS, type EventRow } from "@/lib/events";
+import { Radar } from "@/components/radar";
+import { SignInButton } from "@/components/sign-in-button";
+import { LocalTime } from "@/components/local-time";
+import { Notice, PlacePill, PrizePill, StatusPill } from "@/components/ui";
+
+const SOURCES = ["Devpost", "Unstop", "Devfolio", "HackerEarth", "Major League Hacking", "College feeds"];
+
+const STEPS = [
+  { icon: ScanSearch, title: "Discover", text: "Every 2 hours the agent checks six permitted sources and normalises dates, fees and prizes." },
+  { icon: BellRing, title: "Match", text: "Your interests, cities and fee limit decide what reaches you, in-app and by email." },
+  { icon: FileText, title: "Prepare", text: "It reads the form and fills only what maps exactly to your profile. Everything else, it asks." },
+  { icon: Hand, title: "You approve", text: "Nothing is sent until you review it. Success is recorded only with a real confirmation." },
+];
+
+const NEVER = [
+  "Solve or skip a CAPTCHA",
+  "Jump a queue or use extra accounts",
+  "Tick terms or declarations for you",
+  "Pay, or store card details",
+];
+
+export default async function Home({ searchParams }: { searchParams: Promise<{ next?: string; error?: string; deleted?: string }> }) {
+  const { supabase, user } = await getUser();
+  const { next, error, deleted } = await searchParams;
+  const nowIso = new Date().toISOString();
+  const open = `registration_deadline.is.null,registration_deadline.gte."${nowIso}"`;
+
+  // Real numbers only: if the catalogue is unreachable the band is hidden rather than faked.
+  const [all, prize, latest, picks] = await Promise.all([
+    supabase.from("events").select("id", { count: "exact", head: true }).or(open).neq("registration_status", "closed"),
+    supabase.from("events").select("id", { count: "exact", head: true }).or(open).not("prize_text", "is", null),
+    supabase.from("events").select("last_checked_at").order("last_checked_at", { ascending: false }).limit(1),
+    supabase.from("events").select(EVENT_COLUMNS).or(open).eq("registration_status", "open").not("prize_text", "is", null)
+      .order("first_seen_at", { ascending: false }).limit(3),
+  ]);
+  const live = !all.error && (all.count ?? 0) > 0;
+  const events = (picks.data ?? []) as EventRow[];
+  const safeNext = next?.startsWith("/") ? next : "/events";
+
+  return (
+    <>
+      {/* ─── Hero ─── */}
+      <section className="relative overflow-hidden">
+        <div className="grid-bg pointer-events-none absolute inset-0" aria-hidden="true" />
+        <div className="pointer-events-none absolute -top-40 left-1/2 h-[36rem] w-[60rem] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(255_90_31/0.16),transparent)]" aria-hidden="true" />
+        <div className="shell relative grid items-center gap-14 pb-20 pt-14 md:pt-20 lg:grid-cols-[1.05fr_1fr]">
+          <div>
+            {error && <div className="mb-6"><Notice tone="bad">Sign-in did not complete. Please try again.</Notice></div>}
+            {deleted && <div className="mb-6"><Notice tone="ok">Your account and all of its data were deleted.</Notice></div>}
+            <p className="rise inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-dim" style={{ "--i": 0 } as React.CSSProperties}>
+              <span className="ping relative h-2 w-2 rounded-full bg-signal" aria-hidden="true" />
+              Scanning {SOURCES.length} sources every 2 hours
+            </p>
+            <h1 className="mt-6 text-[2.75rem] font-extrabold leading-[1.02] sm:text-6xl lg:text-[4.4rem]">
+              <span className="rise block" style={{ "--i": 1 } as React.CSSProperties}>Find every event</span>
+              <span className="rise block" style={{ "--i": 2 } as React.CSSProperties}><span className="marker">first.</span></span>
+              <span className="rise block" style={{ "--i": 3 } as React.CSSProperties}>Fill every form right.</span>
+            </h1>
+            <p className="rise mt-6 max-w-xl text-lg text-dim" style={{ "--i": 4 } as React.CSSProperties}>
+              EventPilot watches hackathons, competitions and workshops worldwide, puts prize-money events first, and
+              prepares registration forms from your profile. You check and approve before anything is sent.
+            </p>
+            <div className="rise mt-8 flex flex-wrap gap-3" style={{ "--i": 5 } as React.CSSProperties}>
+              {user ? (
+                <Link href="/events" className="btn btn-primary">Open your events <ArrowRight aria-hidden="true" /></Link>
+              ) : (
+                <SignInButton next={safeNext} label="Start with Google" />
+              )}
+              <Link href="/events?prize=1" className="btn btn-ghost"><Trophy aria-hidden="true" /> Prize-money events</Link>
+            </div>
+            <ul className="rise mt-9 flex flex-wrap gap-x-6 gap-y-2 text-sm text-dim" style={{ "--i": 6 } as React.CSSProperties}>
+              <li className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-accent" aria-hidden="true" /> You approve every submission</li>
+              <li className="flex items-center gap-2"><Ban className="h-4 w-4 text-accent" aria-hidden="true" /> No CAPTCHA tricks</li>
+              <li className="flex items-center gap-2"><Lock className="h-4 w-4 text-accent" aria-hidden="true" /> Export or delete your data anytime</li>
+            </ul>
+          </div>
+
+          <div className="relative mx-auto w-full max-w-[34rem]">
+            <div className="fade-in"><Radar /></div>
+            <div className="absolute inset-0 flex flex-col justify-center gap-3 px-2 sm:px-0">
+              {(events.length ? events : SAMPLE).map((e, i) => (
+                <Link
+                  key={e.id}
+                  href={events.length ? `/events/${e.id}` : "/events"}
+                  className={`floaty card card-hover block w-[92%] bg-surface/90 p-3.5 backdrop-blur-md sm:w-[72%] sm:p-4 ${i === 1 ? "self-end" : i === 2 ? "sm:ml-[8%]" : ""}`}
+                  style={{ "--i": i } as React.CSSProperties}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <StatusPill status={e.registration_status} />
+                    <span className="hidden truncate font-mono text-[0.7rem] text-faint sm:inline">{e.event_sources?.name ?? "Sample"}</span>
+                  </div>
+                  <p className="mt-2 line-clamp-1 font-display text-lg font-semibold">{e.title}</p>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <PlacePill e={e} />
+                    <PrizePill prize={e.prize_text} />
+                  </div>
+                </Link>
+              ))}
+              {!events.length && <p className="mx-auto rounded-full border border-line bg-surface whitespace-nowrap px-3 py-1 text-center font-mono text-[0.68rem] text-dim">Sample cards · live after the first scan</p>}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Live numbers ─── */}
+      {live && (
+        <section aria-label="Live catalogue" className="on-dark">
+          <dl className="shell grid grid-cols-2 gap-y-8 py-10 md:grid-cols-4">
+            {[
+              ["Open events", (all.count ?? 0).toLocaleString()],
+              ["With prize money", (prize.count ?? 0).toLocaleString()],
+              ["Sources watched", String(SOURCES.length)],
+              ["Last scan", <LocalTime key="t" iso={latest.data?.[0]?.last_checked_at ?? null} relative />],
+            ].map(([k, v], i) => (
+              <div key={String(k)} className="reveal border-l border-line pl-5" style={{ "--i": i } as React.CSSProperties}>
+                <dt className="eyebrow">{k}</dt>
+                <dd className="mt-2 font-display text-3xl font-bold tabular-nums text-accent sm:text-4xl">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+
+      {/* ─── Sources marquee ─── */}
+      <section aria-label="Sources" className="overflow-hidden py-4">
+        {/* the tilted band is wider than the screen on purpose; this straight wrapper clips it */}
+        <div className="marquee-wrap -mx-4 -rotate-1 overflow-hidden border-y-2 border-text bg-signal py-4 sm:py-5">
+          <div className="marquee flex w-max gap-10 pr-10 sm:gap-12 sm:pr-12">
+            {[...SOURCES, ...SOURCES].map((s, i) => (
+              <span key={i} aria-hidden={i >= SOURCES.length} className="flex items-center gap-10 font-display text-lg font-bold text-signal-ink sm:gap-12 sm:text-xl">
+                {s}<span className="h-2 w-2 rotate-45 bg-signal-ink" />
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── How it works ─── */}
+      <section className="shell py-24" aria-labelledby="how">
+        <p className="eyebrow">How it works</p>
+        <h2 id="how" className="mt-3 max-w-2xl text-4xl font-bold sm:text-5xl">From a listing to a confirmed seat, without the guesswork.</h2>
+        <ol className="relative mt-14 grid gap-5 md:grid-cols-4">
+          <span aria-hidden="true" className="grow-x absolute left-0 right-0 top-7 hidden h-0.5 bg-gradient-to-r from-signal via-text to-transparent md:block" />
+          {STEPS.map(({ icon: Icon, title, text }, i) => (
+            <li key={title} className="reveal relative" style={{ "--i": i } as React.CSSProperties}>
+              <span className="relative grid h-14 w-14 place-items-center rounded-2xl border-2 border-text bg-surface text-text shadow-[4px_4px_0_var(--signal)]">
+                <Icon className="h-6 w-6" aria-hidden="true" />
+              </span>
+              <p className="mt-5 font-mono text-xs text-faint">0{i + 1}</p>
+              <h3 className="mt-1 text-2xl font-semibold">{title}</h3>
+              <p className="mt-2 text-dim">{text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {/* ─── Features ─── */}
+      <section className="shell" aria-labelledby="features">
+        <p className="eyebrow">What you get</p>
+        <h2 id="features" className="mt-3 max-w-2xl text-4xl font-bold sm:text-5xl">Built for the moment registration opens.</h2>
+        <div className="mt-12 grid gap-4 md:grid-cols-6">
+          <article className="on-dark reveal card card-hover p-7 md:col-span-3">
+            <Trophy className="h-6 w-6 text-accent" aria-hidden="true" />
+            <h3 className="mt-5 text-2xl font-semibold">Money events, first</h3>
+            <p className="mt-2 text-dim">Prize pools are read from each listing and flagged, so cash events never get buried. Filter to them in one tap.</p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              {["$138,000", "₹1,00,000", "₹25,000", "$2,000 USDC"].map((p) => <span key={p} className="pill pill-flare"><Trophy aria-hidden="true" />{p}</span>)}
+            </div>
+          </article>
+          <article className="reveal card card-hover p-7 md:col-span-3">
+            <BellRing className="h-6 w-6 text-accent" aria-hidden="true" />
+            <h3 className="mt-5 text-2xl font-semibold">Alerts that respect you</h3>
+            <p className="mt-2 text-dim">New matches, registration opening, deadlines within 24 hours. One email digest every 2 hours at most, never duplicates.</p>
+            <ul className="mt-6 space-y-2 text-sm">
+              {[["Registration opened", "pill-ok"], ["Closes within 24 hours", "pill-warn"], ["New match", "pill-signal"]].map(([t, c]) => (
+                <li key={t} className="flex items-center justify-between rounded-lg border border-line bg-raised px-3 py-2"><span>{t}</span><span className={`pill ${c}`}>alert</span></li>
+              ))}
+            </ul>
+          </article>
+          <article className="reveal card card-hover p-7 md:col-span-4">
+            <UserRound className="h-6 w-6 text-sky" aria-hidden="true" />
+            <h3 className="mt-5 text-2xl font-semibold">A form agent that never guesses</h3>
+            <p className="mt-2 text-dim">Each answer shows where it came from. Questions it cannot map exactly stop the run and come to you.</p>
+            <div className="mt-6 grid gap-2 sm:grid-cols-2">
+              {[["Full name", "from profile", "pill-ok"], ["College email", "from profile", "pill-ok"], ["Why do you want to attend?", "saved answer", "pill-sky"], ["Team name", "needs you", "pill-warn"]].map(([l, s, c]) => (
+                <div key={l} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-raised px-3 py-2.5 text-sm">
+                  <span className="truncate">{l}</span><span className={`pill ${c}`}>{s}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+          <article className="reveal card card-hover p-7 md:col-span-2">
+            <CircleCheck className="h-6 w-6 text-ok" aria-hidden="true" />
+            <h3 className="mt-5 text-2xl font-semibold">Honest status</h3>
+            <p className="mt-2 text-dim">Confirmed only with proof from the form. Unclear means unknown, never retried blindly.</p>
+            <ol className="mt-6 space-y-2 font-mono text-xs">
+              {["prepared", "approved", "submitted", "confirmed"].map((s, i) => (
+                <li key={s} className="flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${i === 3 ? "bg-ok" : "bg-line-strong"}`} />{s}</li>
+              ))}
+            </ol>
+          </article>
+          <article className="reveal card card-hover p-7 md:col-span-2">
+            <Wallet className="h-6 w-6 text-warn" aria-hidden="true" />
+            <h3 className="mt-5 text-2xl font-semibold">Fees, out loud</h3>
+            <p className="mt-2 text-dim">Free, paid or unknown, never assumed. Paid events need you to confirm the exact amount.</p>
+          </article>
+          <article className="reveal card card-hover p-7 md:col-span-4">
+            <Download className="h-6 w-6 text-accent" aria-hidden="true" />
+            <h3 className="mt-5 text-2xl font-semibold">Your data stays yours</h3>
+            <p className="mt-2 max-w-xl text-dim">Protected per user in the database, downloadable as JSON, deletable in one step. No passwords or card numbers, ever.</p>
+          </article>
+        </div>
+      </section>
+
+      {/* ─── Never ─── */}
+      <section className="shell py-24" aria-labelledby="never">
+        <div className="on-dark reveal card grid gap-10 p-8 md:grid-cols-[1fr_1.3fr] md:p-12">
+          <div>
+            <p className="eyebrow">Ground rules</p>
+            <h2 id="never" className="mt-3 text-4xl font-bold">Fast, not sneaky.</h2>
+            <p className="mt-3 text-dim">Speed comes from being ready early, not from breaking a platform&apos;s rules. That keeps your entries valid.</p>
+          </div>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {NEVER.map((n) => (
+              <li key={n} className="flex items-start gap-3 rounded-xl border border-line bg-raised p-4">
+                <Ban className="mt-0.5 h-5 w-5 flex-none text-bad" aria-hidden="true" />
+                <span>Never: {n.toLowerCase()}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* ─── CTA ─── */}
+      <section className="shell">
+        <div className="reveal relative overflow-hidden rounded-3xl border-2 border-text bg-signal px-8 py-16 text-center text-signal-ink shadow-[8px_8px_0_var(--text)] md:py-20">
+          <div className="grid-bg pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
+          <RadarIcon className="relative mx-auto h-10 w-10" aria-hidden="true" />
+          <h2 className="relative mx-auto mt-5 max-w-2xl text-4xl font-bold sm:text-5xl">Let the agent watch. You decide.</h2>
+          <p className="relative mx-auto mt-4 max-w-lg font-medium">Set your interests once. Get the right events, and forms ready before the rush.</p>
+          <div className="relative mt-8 flex flex-wrap justify-center gap-3">
+            {user ? <Link href="/profile" className="btn btn-dark">Set your interests <ArrowRight aria-hidden="true" /></Link> : <SignInButton next="/profile" label="Start with Google" variant="dark" />}
+            <Link href="/events" className="btn btn-ghost">Browse events <ArrowUpRight aria-hidden="true" /></Link>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+// Shown only before the first agent run, and labelled as samples.
+const SAMPLE = [
+  { id: -1, title: "National Level Hackathon", registration_status: "open", city: "Hyderabad", country: "India", format: "in_person", prize_text: "₹1,00,000", event_sources: { name: "Sample" } },
+  { id: -2, title: "Global AI Build Challenge", registration_status: "open", city: null, country: null, format: "online", prize_text: "$50,000", event_sources: { name: "Sample" } },
+  { id: -3, title: "Design Sprint Workshop", registration_status: "upcoming", city: "Bengaluru", country: "India", format: "in_person", prize_text: null, event_sources: { name: "Sample" } },
+] as unknown as EventRow[];

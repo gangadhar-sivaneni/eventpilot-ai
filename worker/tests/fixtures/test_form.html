@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- A registration form we control, for testing the agent end to end without touching a real event. -->
+<html lang="en">
+<head><meta charset="utf-8"><title>EventPilot test registration form</title></head>
+<body>
+  <h1>Test Hackathon 2026 registration</h1>
+  <form id="registration">
+    <p><label for="full_name">Full name *</label> <input id="full_name" name="full_name" required></p>
+    <p><label for="email">Email address *</label> <input id="email" name="email" type="email" required></p>
+    <p><label for="phone">Mobile number</label> <input id="phone" name="phone" type="tel"></p>
+    <p><label for="college">College name *</label> <input id="college" name="college" required></p>
+    <fieldset>
+      <legend>Gender *</legend>
+      <label><input type="radio" name="gender" value="f" required> Female</label>
+      <label><input type="radio" name="gender" value="m"> Male</label>
+      <label><input type="radio" name="gender" value="nb"> Non-binary</label>
+    </fieldset>
+    <p><label for="tshirt">T-shirt size</label>
+      <select id="tshirt" name="tshirt"><option value="">Choose</option><option>S</option><option>M</option><option>L</option></select></p>
+    <p><label for="why">Why do you want to attend? *</label> <textarea id="why" name="why" required></textarea></p>
+    <p><label for="team">Team name *</label> <input id="team" name="team" required></p>
+    <p><label for="resume">Resume upload</label> <input id="resume" name="resume" type="file"></p>
+    <p><label><input type="checkbox" name="coc" required> I agree to the code of conduct</label></p>
+    <button type="submit">Register</button>
+  </form>
+  <div id="confirmation" role="status" hidden></div>
+  <script>
+    document.getElementById("registration").addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (!e.target.checkValidity()) return;
+      e.target.hidden = true;
+      const box = document.getElementById("confirmation");
+      box.textContent = "Registration confirmed. Reference: EP-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+      box.hidden = false;
+    });
+  </script>
+</body>
+</html>

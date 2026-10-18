@@ -1,0 +1,45 @@
+name: worker
+on:
+  schedule:
+    - cron: "17 */2 * * *"   # every 2 hours at :17 (GitHub may start scheduled runs late; nothing here is real-time)
+  workflow_dispatch:
+
+concurrency:
+  group: worker              # never two runs at once (the DB job locks are the second line of defence)
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: worker
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      GMAIL_USER: ${{ secrets.GMAIL_USER }}
+      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+      SITE_URL: ${{ vars.SITE_URL }}
+    steps:
+      - name: Not configured yet
+        if: env.SUPABASE_URL == ''
+        run: echo "::notice::Add the SUPABASE_URL and SUPABASE_SECRET_KEY repository secrets to enable the worker (see README)"
+      - uses: actions/checkout@v4
+        if: env.SUPABASE_URL != ''
+      - uses: actions/setup-python@v5
+        if: env.SUPABASE_URL != ''
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: worker/requirements.txt
+      - run: pip install -r requirements.txt
+        if: env.SUPABASE_URL != ''
+      - run: python discovery.py
+        if: env.SUPABASE_URL != ''
+      - run: python match_users.py
+        if: env.SUPABASE_URL != '' && !cancelled()   # match whatever was imported, even if one source failed
+      - run: python notify.py
+        if: env.SUPABASE_URL != '' && !cancelled()
+      - run: python cleanup.py
+        if: env.SUPABASE_URL != '' && !cancelled()
