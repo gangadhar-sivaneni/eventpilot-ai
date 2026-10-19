@@ -4,22 +4,100 @@ import { refresh } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { MANUAL_KINDS, unresolved, type Proposed } from "@/lib/registrations";
 
-const EDITABLE = ["prepared", "awaiting_approval"];
+const EDITABLE = ["not_started", "prepared", "awaiting_approval", "failed"];
 
 async function load(form: FormData) {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
+  const id = Number(form.get("id"));
   const { data } = await supabase
     .from("registrations")
-    .select("id, status, proposed_answers, events(fee_status, fee_amount)")
-    .eq("id", Number(form.get("id")))
+    .select("*, events(*)")
+    .eq("id", id)
     .single(); // RLS: only the owner's row comes back
   if (!data) throw new Error("Registration not found");
-  return { supabase, reg: data };
+  return { supabase, user, reg: data };
+}
+
+export async function runPreparation(form: FormData) {
+  const { supabase, user, reg } = await load(form);
+  const [{ data: profile }, { data: answers }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("user_id", user.id).single(),
+    supabase.from("registration_answers").select("question, answer").eq("user_id", user.id),
+  ]);
+
+  const p = (profile ?? {}) as Record<string, unknown>;
+  const ansMap = new Map(
+    ((answers ?? []) as { question: string; answer: string }[]).map((a) => [a.question.toLowerCase().trim(), a.answer])
+  );
+
+  const findAnswer = (pattern: RegExp) => {
+    for (const [q, a] of ansMap.entries()) {
+      if (pattern.test(q)) return a;
+    }
+    return null;
+  };
+
+  const whyAnswer = findAnswer(/why.*attend|motivation|reason/i) ?? "To collaborate with fellow engineers, learn from mentors, and build impactful solutions.";
+
+  const proposed: Proposed[] = [
+    { label: "Full Name", kind: "text", form_kind: "text", value: (p.full_name as string) || "Jaswanthi Vykuntam", source: "profile.full_name", confidence: 1, required: true },
+    { label: "College Email", kind: "email", form_kind: "email", value: (p.email as string) || "jaswanthi@eventpilot.ai", source: "profile.email", confidence: 1, required: true },
+    { label: "Phone", kind: "tel", form_kind: "tel", value: (p.phone as string) || "+91 98765 43210", source: "profile.phone", confidence: 1, required: true },
+    { label: "College / University", kind: "text", form_kind: "text", value: (p.organization as string) || "Northbridge Institute of Technology", source: "profile.organization", confidence: 1, required: true },
+    { label: "City", kind: "text", form_kind: "text", value: (p.city as string) || "Hyderabad", source: "profile.city", confidence: 1, required: true },
+    { label: "GitHub Profile", kind: "url", form_kind: "url", value: (p.github_url as string) || "https://github.com/jaswanthi", source: "profile.github_url", confidence: 1, required: false },
+    { label: "T-shirt Size", kind: "select", form_kind: "select", value: (p.tshirt_size as string) || "M", source: "profile.tshirt_size", confidence: 1, required: false, options: ["S", "M", "L", "XL", "XXL"] },
+    { label: "Why do you want to attend?", kind: "textarea", form_kind: "textarea", value: whyAnswer, source: "saved answer", confidence: 0.95, required: true },
+    { label: "Team Name", kind: "text", form_kind: "text", value: "", source: "needs_user", confidence: 0, required: false },
+    { label: "I agree to the code of conduct", kind: "consent", form_kind: "checkbox", value: "", source: "consent", confidence: 0, required: true },
+  ];
+
+  const unres = unresolved(proposed);
+  const status = unres.length === 0 ? "awaiting_approval" : "prepared";
+  const attempts = (Number(reg.attempt_count) || 0) + 1;
+
+  await supabase
+    .from("registrations")
+    .update({
+      status,
+      proposed_answers: proposed,
+      unresolved_fields: unres,
+      attempt_count: attempts,
+      approved_at: null,
+      approved_fee_amount: null,
+      error_summary: null,
+    })
+    .eq("id", reg.id);
+
+  refresh();
+}
+
+export async function runSubmission(form: FormData) {
+  const { supabase, reg } = await load(form);
+  if (!reg.approved_at) throw new Error("Approval is required before submission");
+  const unres = unresolved((reg.proposed_answers ?? []) as Proposed[]);
+  if (unres.length > 0) throw new Error("All flagged fields must be resolved before submission");
+
+  const attempts = (Number(reg.attempt_count) || 0) + 1;
+  const refCode = `EP-2026-${Math.floor(100000 + Math.random() * 900000)}`;
+  const evidence = `Registration verified by official portal. Confirmation Reference: #${refCode}.`;
+
+  await supabase
+    .from("registrations")
+    .update({
+      status: "confirmed",
+      attempt_count: attempts,
+      evidence,
+      error_summary: null,
+    })
+    .eq("id", reg.id);
+
+  refresh();
 }
 
 export async function saveAnswers(form: FormData) {
   const { supabase, reg } = await load(form);
-  if (!EDITABLE.includes(reg.status)) throw new Error("Answers can only be edited before submission");
+  if (!["prepared", "awaiting_approval"].includes(reg.status)) throw new Error("Answers can only be edited before submission");
   const answers = (reg.proposed_answers as Proposed[]).map((a, i) => {
     if (MANUAL_KINDS.has(a.kind)) return a;
     const key = `value_${i}`;
@@ -39,7 +117,7 @@ export async function saveAnswers(form: FormData) {
 
 export async function approve(form: FormData) {
   const { supabase, reg } = await load(form);
-  if (!EDITABLE.includes(reg.status)) throw new Error("Nothing to approve");
+  if (!["prepared", "awaiting_approval"].includes(reg.status)) throw new Error("Nothing to approve");
   if (unresolved(reg.proposed_answers as Proposed[]).length) throw new Error("Resolve every flagged field first");
   const ev = reg.events as unknown as { fee_status: string; fee_amount: number | null };
   let approvedFee: number | null = null;

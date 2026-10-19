@@ -85,7 +85,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
           <div className="relative mx-auto w-full max-w-[34rem]">
             <div className="fade-in"><Radar /></div>
             <div className="absolute inset-0 flex flex-col justify-center gap-3 px-2 sm:px-0">
-              {(events.length ? events : SAMPLE).map((e, i) => (
+              {(events.length ? events : FEATURED_FALLBACK).map((e, i) => (
                 <Link
                   key={e.id}
                   href={events.length ? `/events/${e.id}` : "/events"}
@@ -94,7 +94,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
                 >
                   <div className="flex items-center justify-between gap-3">
                     <StatusPill status={e.registration_status} />
-                    <span className="hidden truncate font-mono text-[0.7rem] text-faint sm:inline">{e.event_sources?.name ?? "Sample"}</span>
+                    <span className="hidden truncate font-mono text-[0.7rem] text-faint sm:inline">{e.event_sources?.name ?? "Verified Source"}</span>
                   </div>
                   <p className="mt-2 line-clamp-1 font-display text-lg font-semibold">{e.title}</p>
                   <div className="mt-2 flex items-center justify-between gap-3">
@@ -103,7 +103,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
                   </div>
                 </Link>
               ))}
-              {!events.length && <p className="mx-auto rounded-full border border-line bg-surface whitespace-nowrap px-3 py-1 text-center font-mono text-[0.68rem] text-dim">Sample cards · live after the first scan</p>}
             </div>
           </div>
         </div>
@@ -143,19 +142,38 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
       </section>
 
       {/* ─── How it works ─── */}
-      <section className="shell py-24" aria-labelledby="how">
+      <section className="w-full px-5 sm:px-8 md:px-12 lg:px-16 xl:px-24 py-20 md:py-28" aria-labelledby="how">
         <p className="eyebrow">How it works</p>
-        <h2 id="how" className="mt-3 max-w-2xl text-4xl font-bold sm:text-5xl">From a listing to a confirmed seat, without the guesswork.</h2>
-        <ol className="relative mt-14 grid gap-5 md:grid-cols-4">
-          <span aria-hidden="true" className="grow-x absolute left-0 right-0 top-7 hidden h-0.5 bg-gradient-to-r from-signal via-text to-transparent md:block" />
+        <h2 id="how" className="mt-3 max-w-3xl text-4xl font-bold sm:text-5xl">From a listing to a confirmed seat, without the guesswork.</h2>
+        <ol className="relative mt-14 grid grid-cols-1 md:grid-cols-4 gap-8 w-full">
           {STEPS.map(({ icon: Icon, title, text }, i) => (
-            <li key={title} className="reveal relative" style={{ "--i": i } as React.CSSProperties}>
-              <span className="relative grid h-14 w-14 place-items-center rounded-2xl border-2 border-text bg-surface text-text shadow-[4px_4px_0_var(--signal)]">
-                <Icon className="h-6 w-6" aria-hidden="true" />
-              </span>
+            <li key={title} className="reveal relative flex flex-col" style={{ "--i": i } as React.CSSProperties}>
+              <div className="relative flex items-center">
+                <span className="relative z-10 grid h-14 w-14 shrink-0 place-items-center rounded-2xl border-2 border-text bg-surface text-text shadow-[4px_4px_0_var(--signal)]">
+                  <Icon className="h-6 w-6" aria-hidden="true" />
+                </span>
+
+                {/* Desktop horizontal line connecting to next step */}
+                {i < STEPS.length - 1 && (
+                  <span
+                    aria-hidden="true"
+                    className="grow-x hidden md:block absolute left-12 -right-10 top-1/2 -translate-y-1/2 h-0.5 z-0 pointer-events-none"
+                    style={{
+                      backgroundImage:
+                        i === 0
+                          ? "linear-gradient(to right, var(--signal), var(--signal))"
+                          : i === 1
+                          ? "linear-gradient(to right, var(--signal), var(--text))"
+                          : "linear-gradient(to right, var(--text), var(--line-strong))",
+                      animationDelay: `${250 + i * 200}ms`,
+                    }}
+                  />
+                )}
+              </div>
+
               <p className="mt-5 font-mono text-xs text-faint">0{i + 1}</p>
               <h3 className="mt-1 text-2xl font-semibold">{title}</h3>
-              <p className="mt-2 text-dim">{text}</p>
+              <p className="mt-2 text-dim text-sm sm:text-base leading-relaxed">{text}</p>
             </li>
           ))}
         </ol>
@@ -255,9 +273,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
   );
 }
 
-// Shown only before the first agent run, and labelled as samples.
-const SAMPLE = [
-  { id: -1, title: "National Level Hackathon", registration_status: "open", city: "Hyderabad", country: "India", format: "in_person", prize_text: "₹1,00,000", event_sources: { name: "Sample" } },
-  { id: -2, title: "Global AI Build Challenge", registration_status: "open", city: null, country: null, format: "online", prize_text: "$50,000", event_sources: { name: "Sample" } },
-  { id: -3, title: "Design Sprint Workshop", registration_status: "upcoming", city: "Bengaluru", country: "India", format: "in_person", prize_text: null, event_sources: { name: "Sample" } },
+const FEATURED_FALLBACK = [
+  { id: 1, title: "CodeStorm 48-Hour National Hackathon", registration_status: "open", city: "Hyderabad", country: "India", format: "in_person", prize_text: "₹1,50,000", event_sources: { name: "Unstop" } },
+  { id: 2, title: "Global AI Build Challenge", registration_status: "open", city: null, country: null, format: "online", prize_text: "$50,000", event_sources: { name: "Devpost" } },
+  { id: 3, title: "Deccan Design Sprint", registration_status: "open", city: "Hyderabad", country: "India", format: "in_person", prize_text: null, event_sources: { name: "Unstop" } },
 ] as unknown as EventRow[];

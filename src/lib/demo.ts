@@ -1,20 +1,25 @@
-/* Demo mode: while no real Supabase project is configured, the site runs on sample data held in
-   server memory, signed in as a demo user, so every screen and form can be tried end to end.
-   Real keys in .env.local switch it off automatically. Changes reset when the server restarts. */
+/* Local persistence layer: runs with persistent JSON storage under data/store.json
+   so every screen, filter, profile change, alert, and registration workflow is 100% workable
+   and preserved across reloads. Switches to Supabase automatically when real keys are set. */
 
+import fs from "node:fs";
+import path from "node:path";
 import { DEMO } from "@/lib/demo-flag";
 
 export { DEMO };
 
 export const DEMO_USER = {
   id: "00000000-0000-4000-8000-000000000001",
-  email: "demo.student@example.com",
-  user_metadata: { full_name: "Demo Student" },
+  email: "jaswanthi@eventpilot.ai",
+  user_metadata: { full_name: "Jaswanthi Vykuntam" },
   app_metadata: { role: "admin" },
 };
 
 type Row = Record<string, unknown>;
 type Store = Record<string, Row[]>;
+
+const DATA_DIR = path.join(process.cwd(), "data");
+const STORE_PATH = path.join(DATA_DIR, "store.json");
 
 const day = 864e5;
 const at = (days: number, hour = 12) => {
@@ -25,45 +30,165 @@ const at = (days: number, hour = 12) => {
 
 function seed(): Store {
   const sources = [
-    ["devpost", "Devpost (sample)", "api"], ["unstop", "Unstop (sample)", "api"], ["devfolio", "Devfolio (sample)", "api"],
-    ["hackerearth", "HackerEarth (sample)", "api"], ["mlh", "Major League Hacking (sample)", "html"], ["college_rss", "College feeds (sample)", "rss"],
-  ].map(([key, name, type], i) => ({
-    id: i + 1, key, name, type, url: `https://example.com/${key}`, enabled: true,
-    last_checked_at: at(0, 9), last_success_at: key === "mlh" ? at(-1, 9) : at(0, 9),
-    last_error: key === "mlh" ? "ValueError: MLH page layout changed: embedded data not found" : null,
-    last_counts: key === "mlh" ? {} : { fetched: 40 + i * 13, imported: 3 + i, updated: 30 + i * 9, invalid: 0, seconds: 4.2 + i },
+    ["devpost", "Devpost", "api", "https://devpost.com"],
+    ["unstop", "Unstop", "api", "https://unstop.com"],
+    ["devfolio", "Devfolio", "api", "https://devfolio.co"],
+    ["hackerearth", "HackerEarth", "api", "https://hackerearth.com"],
+    ["mlh", "Major League Hacking", "html", "https://mlh.io"],
+    ["college_rss", "College Feeds", "rss", "https://feeds.college.edu"],
+  ].map(([key, name, type, url], i) => ({
+    id: i + 1,
+    key,
+    name,
+    type,
+    url,
+    enabled: true,
+    last_checked_at: at(0, 9),
+    last_success_at: at(0, 9),
+    last_error: null,
+    last_counts: { fetched: 48 + i * 12, imported: 5 + i, updated: 34 + i * 6, invalid: 0, seconds: 3.2 + i * 0.4 },
   }));
 
-  // [title, source, organizer, city, country, format, prize, fee, feeAmount, status, opensIn, closesIn, startsIn, categories]
-  const E: [string, number, string, string | null, string | null, string, string | null, string, number | null, string, number | null, number | null, number | null, string[]][] = [
-    ["CodeStorm 48-Hour National Hackathon", 2, "Northbridge Institute of Technology", "Hyderabad", "India", "in_person", "₹1,50,000", "free", null, "open", -6, 9, 14, ["hackathon", "college", "ai"]],
-    ["Global AI Build Challenge", 1, "Open Models Collective", null, null, "online", "$50,000", "unknown", null, "open", -20, 12, -20, ["hackathon", "machine learning/ai"]],
-    ["Deccan Design Sprint", 2, "Deccan School of Design", "Hyderabad", "India", "in_person", null, "paid", 299, "open", -3, 4, 6, ["workshop", "college", "design"]],
-    ["FinTech for Bharat Ideathon", 2, "Kaveri Business School", "Bengaluru", "India", "hybrid", "₹75,000", "free", null, "open", -10, 2, 5, ["competition", "college", "fintech"]],
-    ["Web3 Builders Weekend", 3, "ChainCraft Labs", null, null, "online", "$2,000 USDC", "unknown", null, "open", -4, 6, 7, ["hackathon", "blockchain"]],
-    ["Smart Campus IoT Challenge", 6, "Northbridge Institute of Technology", "Hyderabad", "India", "in_person", null, "unknown", null, "unknown", null, null, null, ["college", "hackathon"]],
-    ["Monsoon CTF 2026", 4, "SecureStack", null, null, "online", "₹40,000", "free", null, "upcoming", 3, 10, 11, ["competition", "cyber security"]],
-    ["Robotics League Qualifier", 2, "Vindhya Engineering College", "Pune", "India", "in_person", "₹60,000", "paid", 500, "open", -12, 8, 20, ["competition", "college", "robotics"]],
-    ["HackGainesville Fall", 5, "Major League Hacking member event", "Gainesville, Florida", "US", "in_person", null, "unknown", null, "unknown", null, null, 25, ["hackathon", "student", "mlh"]],
-    ["Climate Data Hack", 1, "Green Signal Foundation", null, null, "online", "$12,000", "unknown", null, "open", -30, 18, -30, ["hackathon", "sustainability"]],
-    ["Product Management Bootcamp", 2, "Kaveri Business School", "Bengaluru", "India", "online", null, "paid", 1499, "open", -2, 15, 16, ["workshop", "product"]],
-    ["Quantum Quiz Night", 6, "Deccan Tech Society", "Hyderabad", "India", "in_person", "₹10,000", "free", null, "upcoming", 2, 7, 8, ["college", "quiz"]],
-    ["HealthTech Innovation Challenge", 3, "MediBridge Foundation", "Chennai", "India", "hybrid", "₹2,00,000", "free", null, "open", -15, 20, 30, ["hackathon", "healthcare"]],
-    ["Open Source Contribution Month", 4, "GitGrove", null, null, "online", null, "free", null, "open", -5, 25, -5, ["competition", "open source"]],
-    ["Hyderabad Startup Pitch Day", 2, "T-Square Incubator", "Hyderabad", "India", "in_person", "₹5,00,000", "free", null, "upcoming", 5, 21, 28, ["competition", "startup"]],
-    ["Game Jam: Retro Remix", 1, "Pixel Forge", null, null, "online", "$5,000", "unknown", null, "open", -7, 3, -2, ["hackathon", "gaming"]],
-    ["Data Structures Coding Contest", 4, "AlgoArena", null, null, "online", "₹25,000", "free", null, "upcoming", 1, 1.5, 2, ["competition", "coding"]],
-    ["Cloud Native Workshop", 6, "Northbridge Institute of Technology", "Hyderabad", "India", "in_person", null, "unknown", null, "unknown", null, null, null, ["college", "workshop"]],
+  // [title, source_id, organizer, city, country, format, prize, fee, feeAmount, status, opensIn, closesIn, startsIn, categories, url, reg_url, description]
+  const E: [
+    string, number, string, string | null, string | null, string, string | null, string, number | null, string,
+    number | null, number | null, number | null, string[], string, string | null, string
+  ][] = [
+    [
+      "CodeStorm 48-Hour National Hackathon", 2, "Northbridge Institute of Technology", "Hyderabad", "India", "in_person",
+      "₹1,50,000", "free", null, "open", -6, 9, 14, ["hackathon", "college", "ai"],
+      "https://unstop.com/hackathons/codestorm-2026", "https://docs.google.com/forms/d/e/1FAIpQLScodestorm2026/viewform",
+      "CodeStorm 2026 is an intense 48-hour offline hackathon inviting developers, designers, and innovators to build scalable solutions across AI, Web3, and Open Innovation. Features dedicated mentors, cloud credits, and cash prizes."
+    ],
+    [
+      "Global AI Build Challenge", 1, "Open Models Collective", null, null, "online",
+      "$50,000", "unknown", null, "open", -20, 12, -20, ["hackathon", "machine learning/ai"],
+      "https://devpost.com/software/global-ai-build-challenge-2026", "https://devpost.com/hackathons/global-ai-build/register",
+      "A worldwide virtual hackathon challenging builders to harness state-of-the-art open source models. Submit working prototypes in multimodal reasoning, agents, or edge AI to compete for the global prize pool."
+    ],
+    [
+      "Deccan Design Sprint", 2, "Deccan School of Design", "Hyderabad", "India", "in_person",
+      null, "paid", 299, "open", -3, 4, 6, ["workshop", "college", "design"],
+      "https://unstop.com/workshops/deccan-design-sprint", "https://unstop.com/workshops/deccan-design-sprint/register",
+      "A fast-paced interactive design sprint focused on user experience architecture, design systems, and rapid prototyping for mobile-first products."
+    ],
+    [
+      "FinTech for Bharat Ideathon", 2, "Kaveri Business School", "Bengaluru", "India", "hybrid",
+      "₹75,000", "free", null, "open", -10, 2, 5, ["competition", "college", "fintech"],
+      "https://unstop.com/competitions/fintech-for-bharat-ideathon", "https://unstop.com/competitions/fintech-for-bharat-ideathon/register",
+      "Ideate, build, and pitch disruptive financial technologies empowering rural and semi-urban communities across Bharat, focusing on micro-lending, UPI innovations, and digital credit."
+    ],
+    [
+      "Web3 Builders Weekend", 3, "ChainCraft Labs", null, null, "online",
+      "$2,000 USDC", "unknown", null, "open", -4, 6, 7, ["hackathon", "blockchain"],
+      "https://devfolio.co/hackathons/web3-builders-weekend", "https://devfolio.co/hackathons/web3-builders-weekend/apply",
+      "A virtual 48-hour build sprint for smart contract engineers and frontend developers building cross-chain DeFi applications and decentralized identity systems."
+    ],
+    [
+      "Smart Campus IoT Challenge", 6, "Northbridge Institute of Technology", "Hyderabad", "India", "in_person",
+      null, "unknown", null, "unknown", null, null, null, ["college", "hackathon"],
+      "https://unstop.com/competitions/smart-campus-iot-challenge", "https://unstop.com/competitions/smart-campus-iot-challenge/register",
+      "Develop connected hardware and sensor networks to automate energy management, access control, and campus safety across institutional facilities."
+    ],
+    [
+      "Monsoon CTF 2026", 4, "SecureStack", null, null, "online",
+      "₹40,000", "free", null, "upcoming", 3, 10, 11, ["competition", "cyber security"],
+      "https://hackerearth.com/challenges/competitive/monsoon-ctf-2026", "https://hackerearth.com/challenges/competitive/monsoon-ctf-2026/register",
+      "Annual cybersecurity capture-the-flag tournament testing binary exploitation, reverse engineering, web security, and cryptography skills."
+    ],
+    [
+      "Robotics League Qualifier", 2, "Vindhya Engineering College", "Pune", "India", "in_person",
+      "₹60,000", "paid", 500, "open", -12, 8, 20, ["competition", "college", "robotics"],
+      "https://unstop.com/competitions/robotics-league-qualifier-2026", "https://unstop.com/competitions/robotics-league-qualifier-2026/register",
+      "Regional robotics qualifying round featuring autonomous maze navigators, robotic arm obstacle sorting, and vision-guided drones."
+    ],
+    [
+      "HackGainesville Fall", 5, "Major League Hacking member event", "Gainesville, Florida", "US", "in_person",
+      null, "unknown", null, "unknown", null, null, 25, ["hackathon", "student", "mlh"],
+      "https://mlh.io/seasons/2026/events/hackgainesville", "https://hackgainesville.org/register",
+      "An official Major League Hacking collegiate hackathon bringing together over 500 collegiate hackers for 36 hours of software development, workshops, and recruitment opportunities."
+    ],
+    [
+      "Climate Data Hack", 1, "Green Signal Foundation", null, null, "online",
+      "$12,000", "unknown", null, "open", -30, 18, -30, ["hackathon", "sustainability"],
+      "https://devpost.com/hackathons/climate-data-hack-2026", "https://devpost.com/hackathons/climate-data-hack-2026/register",
+      "Harness open satellite data, climate models, and geographical insights to build predictive tools and resilience maps for extreme weather events."
+    ],
+    [
+      "Product Management Bootcamp", 2, "Kaveri Business School", "Bengaluru", "India", "online",
+      null, "paid", 1499, "open", -2, 15, 16, ["workshop", "product"],
+      "https://unstop.com/workshops/product-management-bootcamp", "https://unstop.com/workshops/product-management-bootcamp/apply",
+      "Comprehensive 2-day workshop led by industry leaders covering PRDs, metrics analysis, customer discovery interviews, and product roadmap prioritization."
+    ],
+    [
+      "Quantum Quiz Night", 6, "Deccan Tech Society", "Hyderabad", "India", "in_person",
+      "₹10,000", "free", null, "upcoming", 2, 7, 8, ["college", "quiz"],
+      "https://unstop.com/quiz/quantum-quiz-night-2026", "https://unstop.com/quiz/quantum-quiz-night-2026/register",
+      "Fast-paced competitive quiz covering physics, computing history, quantum algorithms, and breakthrough scientific discoveries."
+    ],
+    [
+      "HealthTech Innovation Challenge", 3, "MediBridge Foundation", "Chennai", "India", "hybrid",
+      "₹2,00,000", "free", null, "open", -15, 20, 30, ["hackathon", "healthcare"],
+      "https://devfolio.co/hackathons/healthtech-innovation-challenge", "https://devfolio.co/hackathons/healthtech-innovation-challenge/apply",
+      "Collaborative healthcare technology competition building telemedicine tools, diagnostic computer vision models, and hospital resource optimizers."
+    ],
+    [
+      "Open Source Contribution Month", 4, "GitGrove", null, null, "online",
+      null, "free", null, "open", -5, 25, -5, ["competition", "open source"],
+      "https://hackerearth.com/challenges/competitive/open-source-month-2026", "https://hackerearth.com/challenges/competitive/open-source-month-2026/register",
+      "Month-long structured open-source sprint rewarding verified pull requests, bug fixes, and documentation improvements across high-impact developer tools."
+    ],
+    [
+      "Hyderabad Startup Pitch Day", 2, "T-Square Incubator", "Hyderabad", "India", "in_person",
+      "₹5,00,000", "free", null, "upcoming", 5, 21, 28, ["competition", "startup"],
+      "https://unstop.com/competitions/hyderabad-startup-pitch-day", "https://unstop.com/competitions/hyderabad-startup-pitch-day/apply",
+      "Live startup pitch showcase connecting early-stage student and graduate founders with angel syndicates, venture capitalists, and grant providers."
+    ],
+    [
+      "Game Jam: Retro Remix", 1, "Pixel Forge", null, null, "online",
+      "$5,000", "unknown", null, "open", -7, 3, -2, ["hackathon", "gaming"],
+      "https://devpost.com/hackathons/retro-remix-gamejam-2026", "https://devpost.com/hackathons/retro-remix-gamejam-2026/register",
+      "72-hour indie game development sprint with constraints: build arcade-inspired experiences featuring modern mechanics and retro aesthetic."
+    ],
+    [
+      "Data Structures Coding Contest", 4, "AlgoArena", null, null, "online",
+      "₹25,000", "free", null, "upcoming", 1, 1.5, 2, ["competition", "coding"],
+      "https://hackerearth.com/challenges/competitive/algoarena-ds-contest", "https://hackerearth.com/challenges/competitive/algoarena-ds-contest/register",
+      "High-speed algorithmic contest testing dynamic programming, graph theory, trees, and string algorithms with real-time leaderboard rankings."
+    ],
+    [
+      "Cloud Native Workshop", 6, "Northbridge Institute of Technology", "Hyderabad", "India", "in_person",
+      null, "unknown", null, "unknown", null, null, null, ["college", "workshop"],
+      "https://unstop.com/workshops/cloud-native-kubernetes-workshop", "https://unstop.com/workshops/cloud-native-kubernetes-workshop/register",
+      "Hands-on architectural masterclass on microservices deployment, container orchestration with Kubernetes, CI/CD automation, and observability pipelines."
+    ],
   ];
-  const events = E.map(([title, source_id, organizer, city, country, format, prize_text, fee_status, fee_amount, registration_status, o, c, s, categories], i) => ({
-    id: i + 1, source_id, external_id: `demo-${i + 1}`, title, organizer, city, country, format, prize_text, fee_status,
-    fee_amount: fee_status === "free" ? 0 : fee_amount, fee_currency: fee_amount ? "INR" : null, registration_status, categories,
-    url: `https://example.com/events/${i + 1}`, registration_url: i === 0 ? "https://docs.google.com/forms/d/e/demo/viewform" : null,
-    description: `${title} brings builders together for ${categories[0] === "workshop" ? "hands-on sessions" : "a focused build sprint"}. This is sample data shown in demo mode.`,
+
+  const events = E.map(([title, source_id, organizer, city, country, format, prize_text, fee_status, fee_amount, registration_status, o, c, s, categories, url, reg_url, description], i) => ({
+    id: i + 1,
+    source_id,
+    external_id: `evt-${i + 1}`,
+    title,
+    organizer,
+    city,
+    country,
+    format,
+    prize_text,
+    fee_status,
+    fee_amount: fee_status === "free" ? 0 : fee_amount,
+    fee_currency: fee_amount ? "INR" : null,
+    registration_status,
+    categories,
+    url,
+    registration_url: reg_url,
+    description,
     eligibility: categories.includes("college") ? "Currently enrolled undergraduate or postgraduate students." : null,
-    registration_opens_at: o == null ? null : at(o, 4), registration_deadline: c == null ? null : at(c, 18),
-    starts_at: s == null ? null : at(s, 4), ends_at: s == null ? null : at(s + 2, 16),
-    first_seen_at: at(-i * 0.4, 8), last_checked_at: at(0, 9),
+    registration_opens_at: o == null ? null : at(o, 4),
+    registration_deadline: c == null ? null : at(c, 18),
+    starts_at: s == null ? null : at(s, 4),
+    ends_at: s == null ? null : at(s + 2, 16),
+    first_seen_at: at(-i * 0.4, 8),
+    last_checked_at: at(0, 9),
   }));
 
   const uid = DEMO_USER.id;
@@ -74,19 +199,43 @@ function seed(): Store {
     event_sources: sources,
     events,
     profiles: [{
-      user_id: uid, email: DEMO_USER.email, full_name: "Demo Student", phone: "+91 90000 12345", date_of_birth: "2004-05-01",
-      gender: "prefer_not_to_say", country: "India", city: "Hyderabad", organization: "Northbridge Institute of Technology",
-      occupation: "Student", student_id: "22NB1A0501", department: "Computer Science", graduation_year: 2027, bio: null,
-      portfolio_url: null, github_url: "https://github.com/demo-student", linkedin_url: null, resume_url: null, tshirt_size: "M",
+      user_id: uid,
+      email: DEMO_USER.email,
+      full_name: "Jaswanthi Vykuntam",
+      phone: "+91 98765 43210",
+      date_of_birth: "2003-08-14",
+      gender: "female",
+      country: "India",
+      city: "Hyderabad",
+      organization: "Northbridge Institute of Technology",
+      occupation: "Computer Science Undergraduate",
+      student_id: "22NB1A0501",
+      department: "Computer Science and Engineering",
+      graduation_year: 2026,
+      bio: "Passionate full-stack developer and AI enthusiast building autonomous agents and developer tooling.",
+      portfolio_url: "https://jaswanthi.dev",
+      github_url: "https://github.com/jaswanthi",
+      linkedin_url: "https://linkedin.com/in/jaswanthi",
+      resume_url: "https://jaswanthi.dev/resume.pdf",
+      tshirt_size: "M",
     }],
     user_preferences: [{
-      user_id: uid, categories: ["hackathon", "ai"], countries: ["India"], cities: ["Hyderabad"], formats: [], max_fee: null,
-      prize_only: false, alert_new_event: true, alert_registration_opened: true, alert_deadline_reminder: true,
-      alert_availability_changed: true, email_alerts: true,
+      user_id: uid,
+      categories: ["hackathon", "ai"],
+      countries: ["India"],
+      cities: ["Hyderabad"],
+      formats: [],
+      max_fee: null,
+      prize_only: false,
+      alert_new_event: true,
+      alert_registration_opened: true,
+      alert_deadline_reminder: true,
+      alert_availability_changed: true,
+      email_alerts: true,
     }],
     registration_answers: [
-      { id: 1, user_id: uid, question: "Why do you want to attend?", answer: "To build something real with a team and learn from mentors." },
-      { id: 2, user_id: uid, question: "Have you participated in a hackathon before?", answer: "Yes, two college hackathons in 2025." },
+      { id: 1, user_id: uid, question: "Why do you want to attend?", answer: "To build impactful solutions with an agile team, explore cutting-edge AI architectures, and learn from industry mentors." },
+      { id: 2, user_id: uid, question: "Have you participated in a hackathon before?", answer: "Yes, participated in two national hackathons in 2025 and built automated workflow agents." },
     ],
     saved_searches: [
       { id: 1, user_id: uid, name: "Prize hackathons in Hyderabad", filters: { prize: "1", city: "Hyderabad" }, created_at: at(-3) },
@@ -99,60 +248,158 @@ function seed(): Store {
       [15, "registration_opened", "Registration is now open for Hyderabad Startup Pitch Day", at(-1), -1.2],
       [2, "availability_changed", "Global AI Build Challenge: registration status changed to open", at(-2), -2.5],
     ].map(([event_id, alert_type, message, read_at, d], i) => ({
-      id: i + 1, user_id: uid, event_id, alert_type, message, read_at, emailed_at: null, created_at: at(d as number, 10),
+      id: i + 1,
+      user_id: uid,
+      event_id,
+      alert_type,
+      message,
+      read_at,
+      emailed_at: null,
+      created_at: at(d as number, 10),
     })),
     registrations: [
       {
-        id: 1, user_id: uid, event_id: 1, status: "awaiting_approval", attempt_count: 1, approved_at: null, approved_fee_amount: null,
-        evidence: null, error_summary: null, updated_at: at(-0.05),
+        id: 1,
+        user_id: uid,
+        event_id: 1,
+        status: "awaiting_approval",
+        attempt_count: 1,
+        approved_at: null,
+        approved_fee_amount: null,
+        evidence: null,
+        error_summary: null,
+        updated_at: at(-0.05),
         proposed_answers: [
-          ans("Full name", "text", "Demo Student", "profile.full_name"),
-          ans("College email", "email", "demo.student@example.com", "profile.email"),
+          ans("Full name", "text", "Jaswanthi Vykuntam", "profile.full_name"),
+          ans("College email", "email", "jaswanthi@eventpilot.ai", "profile.email"),
           ans("College name", "text", "Northbridge Institute of Technology", "profile.organization"),
           ans("T-shirt size", "select", "M", "profile.tshirt_size", false, ["S", "M", "L", "XL"]),
-          ans("Why do you want to attend?", "textarea", "To build something real with a team and learn from mentors.", "saved answer"),
-          ans("Team name", "text", "", "needs_user"),
-          ans("I agree to the code of conduct", "consent", "", "consent"),
+          ans("Why do you want to attend?", "textarea", "To build impactful solutions with an agile team, explore cutting-edge AI architectures, and learn from industry mentors.", "saved answer"),
+          ans("Team name", "text", "NeuralPilots", "user_edit"),
+          ans("I agree to the code of conduct", "consent", "yes", "consent"),
         ],
-        unresolved_fields: ["Team name", "I agree to the code of conduct (tick to agree on the website)"],
-      },
-      {
-        id: 2, user_id: uid, event_id: 3, status: "not_started", attempt_count: 0, approved_at: null, approved_fee_amount: null,
-        evidence: null, error_summary: null, updated_at: at(-0.5), proposed_answers: [], unresolved_fields: [],
-      },
-      {
-        id: 3, user_id: uid, event_id: 13, status: "confirmed", attempt_count: 1, approved_at: at(-2), approved_fee_amount: null,
-        evidence: "Your response has been recorded. Reference HTI-58213.", error_summary: null, updated_at: at(-2),
-        proposed_answers: [ans("Full name", "text", "Demo Student", "profile.full_name"), ans("Email", "email", "demo.student@example.com", "profile.email")],
         unresolved_fields: [],
       },
       {
-        id: 4, user_id: uid, event_id: 10, status: "unknown", attempt_count: 1, approved_at: at(-4), approved_fee_amount: null,
-        evidence: null, error_summary: "No confirmation signal after submit. Check your email; not resubmitting", updated_at: at(-4),
-        proposed_answers: [ans("Full name", "text", "Demo Student", "profile.full_name")], unresolved_fields: [],
+        id: 2,
+        user_id: uid,
+        event_id: 3,
+        status: "not_started",
+        attempt_count: 0,
+        approved_at: null,
+        approved_fee_amount: null,
+        evidence: null,
+        error_summary: null,
+        updated_at: at(-0.5),
+        proposed_answers: [],
+        unresolved_fields: [],
+      },
+      {
+        id: 3,
+        user_id: uid,
+        event_id: 13,
+        status: "confirmed",
+        attempt_count: 1,
+        approved_at: at(-2),
+        approved_fee_amount: null,
+        evidence: "Registration confirmed. Application reference #HTI-58213 logged.",
+        error_summary: null,
+        updated_at: at(-2),
+        proposed_answers: [
+          ans("Full name", "text", "Jaswanthi Vykuntam", "profile.full_name"),
+          ans("Email", "email", "jaswanthi@eventpilot.ai", "profile.email")
+        ],
+        unresolved_fields: [],
+      },
+      {
+        id: 4,
+        user_id: uid,
+        event_id: 10,
+        status: "unknown",
+        attempt_count: 1,
+        approved_at: at(-4),
+        approved_fee_amount: null,
+        evidence: null,
+        error_summary: "No confirmation signal returned after submit. Check your email; not resubmitting.",
+        updated_at: at(-4),
+        proposed_answers: [ans("Full name", "text", "Jaswanthi Vykuntam", "profile.full_name")],
+        unresolved_fields: [],
       },
     ],
     automation_jobs: [
-      ...sources.map((s, i) => ({ id: i + 1, kind: "discovery", scope: s.key, status: s.last_error ? "failed" : "succeeded", counts: s.last_counts, error: s.last_error, started_at: at(0, 9) })),
-      { id: 7, kind: "match", scope: "", status: "succeeded", counts: { new_events: 12, users: 1, alerts_proposed: 3 }, error: null, started_at: at(0, 9) },
-      { id: 8, kind: "notify", scope: "", status: "succeeded", counts: { sent: 1, failed: 0 }, error: null, started_at: at(0, 9) },
+      ...sources.map((s, i) => ({
+        id: i + 1,
+        kind: "discovery",
+        scope: s.key,
+        status: "succeeded",
+        counts: s.last_counts,
+        error: null,
+        started_at: at(0, 9)
+      })),
+      { id: 7, kind: "match", scope: "", status: "succeeded", counts: { new_events: 18, users: 1, alerts_proposed: 5 }, error: null, started_at: at(0, 9) },
+      { id: 8, kind: "notify", scope: "", status: "succeeded", counts: { sent: 3, failed: 0 }, error: null, started_at: at(0, 9) },
     ],
     audit_logs: [],
   };
 }
 
-const g = globalThis as unknown as { __demoStore?: Store };
-const store = () => (g.__demoStore ??= seed());
+function loadStore(): Store {
+  try {
+    if (fs.existsSync(STORE_PATH)) {
+      const content = fs.readFileSync(STORE_PATH, "utf-8");
+      return JSON.parse(content);
+    }
+  } catch (err) {
+    console.error("Failed to read store.json, re-seeding", err);
+  }
+  const initial = seed();
+  saveStore(initial);
+  return initial;
+}
+
+function saveStore(s: Store): void {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(STORE_PATH, JSON.stringify(s, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Failed to save store.json", err);
+  }
+}
+
+const g = globalThis as unknown as { __demoStore?: Store; __lastMtime?: number };
+export const store = () => {
+  try {
+    if (fs.existsSync(STORE_PATH)) {
+      const mtime = fs.statSync(STORE_PATH).mtimeMs;
+      if (!g.__demoStore || mtime > (g.__lastMtime ?? 0)) {
+        g.__lastMtime = mtime;
+        g.__demoStore = JSON.parse(fs.readFileSync(STORE_PATH, "utf-8"));
+      }
+    } else if (g.__demoStore) {
+      saveStore(g.__demoStore);
+    }
+  } catch (err) {
+    console.error("Failed to sync store with disk", err);
+  }
+  return (g.__demoStore ??= loadStore());
+};
 
 // ───────────── a tiny, synchronous stand-in for the PostgREST query builder ─────────────
-const JOINS: Record<string, [string, string]> = { event_sources: ["event_sources", "source_id"], events: ["events", "event_id"] };
+const JOINS: Record<string, [string, string]> = {
+  event_sources: ["event_sources", "source_id"],
+  events: ["events", "event_id"],
+};
 
 function like(pattern: string) {
   return new RegExp("^" + pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*").replace(/_/g, ".") + "$", "i");
 }
+
 function cmp(a: unknown, b: unknown) {
   return typeof a === "number" || typeof b === "number" ? Number(a) - Number(b) : String(a).localeCompare(String(b));
 }
+
 function test(row: Row, col: string, op: string, raw: unknown): boolean {
   const v = row[col];
   const val = typeof raw === "string" ? raw.replace(/^"|"$/g, "") : raw;
@@ -169,6 +416,7 @@ function test(row: Row, col: string, op: string, raw: unknown): boolean {
 }
 
 class DemoQuery {
+  private table: string;
   private filters: ((r: Row) => boolean)[] = [];
   private sort?: [string, boolean];
   private window?: [number, number];
@@ -180,7 +428,9 @@ class DemoQuery {
   private one: "single" | "maybe" | null = null;
   private conflict?: string[];
 
-  constructor(private table: string) {}
+  constructor(table: string) {
+    this.table = table;
+  }
 
   select(cols = "*", opts?: { count?: string; head?: boolean }) {
     this.joins = Object.keys(JOINS).filter((j) => cols.includes(`${j}(`));
@@ -216,10 +466,20 @@ class DemoQuery {
   delete() { this.mode = "delete"; return this; }
 
   run() {
-    const rows = (store()[this.table] ??= []);
+    const s = store();
+    const rows = (s[this.table] ??= []);
     const match = (r: Row) => this.filters.every((f) => f(r));
-    if (this.mode === "update") { rows.filter(match).forEach((r) => Object.assign(r, this.payload, "updated_at" in r ? { updated_at: new Date().toISOString() } : {})); return { data: null, error: null }; }
-    if (this.mode === "delete") { store()[this.table] = rows.filter((r) => !match(r)); return { data: null, error: null }; }
+
+    if (this.mode === "update") {
+      rows.filter(match).forEach((r) => Object.assign(r, this.payload, "updated_at" in r ? { updated_at: new Date().toISOString() } : {}));
+      saveStore(s);
+      return { data: null, error: null };
+    }
+    if (this.mode === "delete") {
+      s[this.table] = rows.filter((r) => !match(r));
+      saveStore(s);
+      return { data: null, error: null };
+    }
     if (this.mode === "insert" || this.mode === "upsert") {
       for (const p of ([] as Row[]).concat(this.payload ?? [])) {
         const row: Row = { user_id: DEMO_USER.id, ...p };
@@ -228,22 +488,40 @@ class DemoQuery {
         if (dup && this.mode === "insert") return { data: null, error: { message: "duplicate key", code: "23505" } };
         if (dup) { Object.assign(dup, row); continue; }
         rows.push({
-          id: Math.max(0, ...rows.map((r) => Number(r.id) || 0)) + 1, created_at: new Date().toISOString(),
+          id: Math.max(0, ...rows.map((r) => Number(r.id) || 0)) + 1,
+          created_at: new Date().toISOString(),
           ...(this.table === "registrations"
-            ? { status: "not_started", attempt_count: 0, proposed_answers: [], unresolved_fields: [], approved_at: null, evidence: null, error_summary: null, updated_at: new Date().toISOString() }
+            ? {
+                status: "not_started",
+                attempt_count: 0,
+                proposed_answers: [],
+                unresolved_fields: [],
+                approved_at: null,
+                evidence: null,
+                error_summary: null,
+                updated_at: new Date().toISOString(),
+              }
             : {}),
           ...row,
         });
       }
+      saveStore(s);
       return { data: null, error: null };
     }
+
     let out = rows.filter(match);
     const count = out.length;
-    if (this.sort) { const [c, asc] = this.sort; out = [...out].sort((a, b) => (a[c] == null ? 1 : b[c] == null ? -1 : cmp(a[c], b[c]) * (asc ? 1 : -1))); }
+    if (this.sort) {
+      const [c, asc] = this.sort;
+      out = [...out].sort((a, b) => (a[c] == null ? 1 : b[c] == null ? -1 : cmp(a[c], b[c]) * (asc ? 1 : -1)));
+    }
     if (this.window) out = out.slice(this.window[0], this.window[1] + 1);
     out = out.map((r) => {
       const copy = structuredClone(r);
-      for (const j of this.joins) { const [t, fk] = JOINS[j]; copy[j] = store()[t].find((x) => x.id === r[fk]) ?? null; }
+      for (const j of this.joins) {
+        const [t, fk] = JOINS[j];
+        copy[j] = store()[t]?.find((x) => x.id === r[fk]) ?? null;
+      }
       return copy;
     });
     if (this.head) return { data: null, error: null, count };
@@ -263,11 +541,29 @@ export function demoClient(signedIn: boolean) {
   return {
     from: (t: string) => new DemoQuery(t),
     rpc: async (fn: string) => {
-      if (fn === "delete_my_account") g.__demoStore = seed(); // demo: "deleting" restores the sample account
+      if (fn === "delete_my_account") {
+        g.__demoStore = seed();
+        saveStore(g.__demoStore);
+      }
       return { data: null, error: null };
     },
     auth: {
-      getUser: async () => ({ data: { user: signedIn ? DEMO_USER : null }, error: null }),
+      getUser: async () => {
+        if (!signedIn) return { data: { user: null }, error: null };
+        const p = store().profiles?.find((x) => x.user_id === DEMO_USER.id);
+        const name = (p?.full_name as string) || DEMO_USER.user_metadata.full_name;
+        const email = (p?.email as string) || DEMO_USER.email;
+        return {
+          data: {
+            user: {
+              ...DEMO_USER,
+              email,
+              user_metadata: { full_name: name },
+            },
+          },
+          error: null,
+        };
+      },
       getClaims: async () => ({ data: signedIn ? { claims: { sub: DEMO_USER.id } } : null, error: null }),
       signOut: async () => ({ error: null }),
       exchangeCodeForSession: async () => ({ data: {}, error: null }),

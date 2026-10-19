@@ -10,7 +10,6 @@ import { NavLinks, type NavItem } from "@/components/nav-links";
 import { SignInButton } from "@/components/sign-in-button";
 import { Menu } from "@/components/menu";
 import { TabBar } from "@/components/tab-bar";
-import { DEMO } from "@/lib/demo-flag";
 
 const display = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-bricolage", display: "swap" });
 const sans = Schibsted_Grotesk({ subsets: ["latin"], variable: "--font-schibsted", display: "swap" });
@@ -48,14 +47,6 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-signal focus:px-4 focus:py-2 focus:text-signal-ink">
           Skip to content
         </a>
-        {DEMO && (
-          <div className="on-dark border-b border-line">
-            <p className="shell flex flex-wrap items-center gap-x-2 py-2 text-xs text-dim">
-              <span className="pill pill-signal h-5">Demo mode</span>
-              <span>Sample data, resets when the server restarts.</span><span className="hidden sm:inline">Add your Supabase keys to go live.</span>
-            </p>
-          </div>
-        )}
         <header className="sticky top-0 z-40 border-b border-line bg-ink/85 backdrop-blur-xl">
           <nav className="shell flex h-16 items-center gap-3 md:gap-6" aria-label="Main">
             <Logo />

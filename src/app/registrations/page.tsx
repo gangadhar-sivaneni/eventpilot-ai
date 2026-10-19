@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Check, CircleAlert, ClipboardList, Terminal, X } from "lucide-react";
+import { Bot, Check, CircleAlert, ClipboardList, RefreshCw, Send, Terminal, X } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { MANUAL_KINDS, unresolved, type Proposed } from "@/lib/registrations";
 import { LocalTime } from "@/components/local-time";
 import { SubmitButton } from "@/components/submit-button";
 import { EmptyState, FeePill, Notice, PageHeader } from "@/components/ui";
-import { approve, cancel, revokeApproval, saveAnswers } from "./actions";
+import { approve, cancel, revokeApproval, runPreparation, runSubmission, saveAnswers } from "./actions";
 
 export const metadata: Metadata = { title: "Registrations" };
 
@@ -14,18 +14,21 @@ const STEPS = ["Prepared", "Your review", "Submitted", "Confirmed"];
 const STEP_OF: Record<string, number> = { not_started: -1, prepared: 0, awaiting_approval: 1, submitted: 2, unknown: 2, failed: 0, confirmed: 3 };
 
 const NEXT_STEP: Record<string, string> = {
-  not_started: "Run the agent on your computer to read this form.",
-  prepared: "The agent stopped on questions it would not guess. Answer the flagged ones below, or add saved answers and prepare again.",
-  awaiting_approval: "Review every answer below. Approve only if all of it is correct.",
-  submitted: "Submitted. Waiting for a confirmation signal; this is not a success yet.",
-  confirmed: "Registered. Keep the evidence below.",
-  failed: "The attempt failed. Read the error, fix it, and prepare again.",
-  unknown: "The outcome is unclear. Check your email and the event page. The agent will not resubmit automatically.",
+  not_started: "Click 'Prepare with Agent' to analyze the form and map your profile details.",
+  prepared: "The agent stopped on questions it would not guess. Answer the flagged fields below, or update saved answers and prepare again.",
+  awaiting_approval: "Review every proposed answer below. Approve only if all fields are accurate.",
+  submitted: "Submitted to official portal. Waiting for confirmation signal.",
+  confirmed: "Registration confirmed and verified. Keep the application reference below.",
+  failed: "The attempt failed. Review the error details below, adjust answers, and prepare again.",
+  unknown: "The outcome is unclear. Check your inbox and the official event page. The agent does not resubmit blindly.",
 };
 
 const SOURCE: Record<string, [string, string]> = {
-  needs_user: ["Needs you", "pill-warn"], consent: ["Your consent", "pill-flare"], manual: ["Do it yourself", ""],
-  "saved answer": ["Saved answer", "pill-sky"], user_edit: ["Edited by you", "pill-signal"],
+  needs_user: ["Needs you", "pill-warn"],
+  consent: ["Your consent", "pill-flare"],
+  manual: ["Do it yourself", ""],
+  "saved answer": ["Saved answer", "pill-sky"],
+  user_edit: ["Edited by you", "pill-signal"],
 };
 
 type Ev = { id: number; title: string; fee_status: "free" | "paid" | "unknown"; fee_amount: number | null; fee_currency: string | null; registration_deadline: string | null };
@@ -54,12 +57,13 @@ export default async function RegistrationsPage() {
 
         {(regs ?? []).map((r, idx) => {
           const ev = r.events as Ev;
-          const answers = r.proposed_answers as Proposed[];
+          const answers = (r.proposed_answers ?? []) as Proposed[];
           const blocking = unresolved(answers);
-          const editable = ["prepared", "awaiting_approval"].includes(r.status);
-          const step = STEP_OF[r.status];
+          const editable = ["not_started", "prepared", "awaiting_approval", "failed"].includes(r.status);
+          const step = STEP_OF[r.status] ?? -1;
           const broken = r.status === "failed" || r.status === "unknown";
           const command = r.approved_at && editable ? `submit ${r.id}` : ["not_started", "prepared", "failed"].includes(r.status) ? `prepare ${r.id}` : null;
+
           return (
             <article key={r.id} className="rise card overflow-hidden" style={{ "--i": idx } as React.CSSProperties}>
               <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line p-5 sm:p-6">
@@ -90,20 +94,26 @@ export default async function RegistrationsPage() {
                   })}
                 </ol>
 
-                <p className="text-dim">{NEXT_STEP[r.status]}</p>
+                <p className="text-dim">{NEXT_STEP[r.status] ?? r.status}</p>
                 {r.error_summary && <Notice tone="bad">{r.error_summary}</Notice>}
                 {r.evidence && <Notice tone="ok">Evidence: {r.evidence}</Notice>}
 
-                {command && (
-                  <div className="on-dark flex items-center gap-3 overflow-x-auto rounded-xl border border-line px-4 py-3 font-mono text-[0.8rem]">
-                    <Terminal className="h-4 w-4 flex-none text-accent" aria-hidden="true" />
-                    <code className="whitespace-nowrap text-dim">python worker/registration.py <span className="text-text">{command}</span></code>
+                {/* Agent Action Button for not_started / failed */}
+                {["not_started", "failed"].includes(r.status) && (
+                  <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-raised/50 p-4">
+                    <form action={runPreparation}>
+                      <input type="hidden" name="id" value={r.id} />
+                      <SubmitButton className="btn btn-primary" pendingText="Preparing form…">
+                        <Bot className="h-4 w-4" aria-hidden="true" /> Prepare with Agent
+                      </SubmitButton>
+                    </form>
+                    <p className="text-xs text-faint">Agent reads form fields and fills verified answers from your profile.</p>
                   </div>
                 )}
 
                 {blocking.length > 0 && (
                   <div className="rounded-xl border border-warn/30 bg-warn/5 p-4">
-                    <p className="flex items-center gap-2 font-medium text-warn"><CircleAlert className="h-4 w-4" aria-hidden="true" /> Needs you before approval</p>
+                    <p className="flex items-center gap-2 font-medium text-warn"><CircleAlert className="h-4 w-4" aria-hidden="true" /> Needs your review before approval</p>
                     <ul className="mt-2 list-disc space-y-1 pl-6 text-sm text-dim">{blocking.map((u) => <li key={u}>{u}</li>)}</ul>
                   </div>
                 )}
@@ -114,11 +124,29 @@ export default async function RegistrationsPage() {
                     <div className="grid gap-4 sm:grid-cols-2">
                       {answers.map((a, i) => <AnswerField key={i} a={a} name={`value_${i}`} disabled={!editable} />)}
                     </div>
-                    {editable && <SubmitButton className="btn btn-ghost" pendingText="Saving…">Save answers</SubmitButton>}
+                    {editable && (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <SubmitButton className="btn btn-ghost" pendingText="Saving…">Save answers</SubmitButton>
+                        <form action={runPreparation}>
+                          <input type="hidden" name="id" value={r.id} />
+                          <SubmitButton className="btn btn-quiet btn-sm" pendingText="Re-reading…">
+                            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Re-prepare
+                          </SubmitButton>
+                        </form>
+                      </div>
+                    )}
                   </form>
                 )}
 
-                <div className="flex flex-wrap items-center gap-2 border-t border-line pt-5">
+                {command && (
+                  <div className="on-dark flex items-center gap-3 overflow-x-auto rounded-xl border border-line px-4 py-3 font-mono text-[0.8rem]">
+                    <Terminal className="h-4 w-4 flex-none text-accent" aria-hidden="true" />
+                    <span className="text-xs text-faint">CLI:</span>
+                    <code className="whitespace-nowrap text-dim">python worker/registration.py <span className="text-text">{command}</span></code>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-3 border-t border-line pt-5">
                   {editable && !r.approved_at && blocking.length === 0 && (
                     <form action={approve} className="flex flex-wrap items-center gap-3">
                       <input type="hidden" name="id" value={r.id} />
@@ -133,15 +161,23 @@ export default async function RegistrationsPage() {
                       <SubmitButton pendingText="Approving…"><Check aria-hidden="true" /> Approve submission</SubmitButton>
                     </form>
                   )}
+
                   {r.approved_at && editable && (
-                    <>
+                    <div className="flex flex-wrap items-center gap-3">
                       <span className="pill pill-ok"><Check aria-hidden="true" /> Approved <LocalTime iso={r.approved_at} relative /></span>
+                      <form action={runSubmission}>
+                        <input type="hidden" name="id" value={r.id} />
+                        <SubmitButton className="btn btn-primary" pendingText="Submitting &amp; verifying…">
+                          <Send className="h-4 w-4" aria-hidden="true" /> Submit &amp; Verify with Agent
+                        </SubmitButton>
+                      </form>
                       <form action={revokeApproval}>
                         <input type="hidden" name="id" value={r.id} />
                         <SubmitButton className="btn btn-quiet btn-sm" pendingText="…">Revoke</SubmitButton>
                       </form>
-                    </>
+                    </div>
                   )}
+
                   {["not_started", "prepared", "awaiting_approval", "failed"].includes(r.status) && (
                     <form action={cancel} className="ml-auto">
                       <input type="hidden" name="id" value={r.id} />
