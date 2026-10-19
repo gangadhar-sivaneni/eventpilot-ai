@@ -17,14 +17,14 @@ type Filters = Partial<Record<Key | "page", string>>;
 
 const QUICK: [string, Partial<Record<Key, string>>][] = [
   ["📍 Hyderabad", { city: "Hyderabad" }],
+  ["🎓 College Fests", { category: "college" }],
+  ["🏢 Big Tech & Companies", { category: "corporate" }],
   ["Open now", { status: "open" }],
   ["Prize money", { prize: "1" }],
   ["Free", { fee: "free" }],
+  ["Hackathons", { category: "hackathon" }],
   ["In person", { format: "in_person" }],
   ["Online", { format: "online" }],
-  ["Hackathons", { category: "hackathon" }],
-  ["Workshops", { category: "workshop" }],
-  ["College", { category: "college" }],
 ];
 const LABELS: Record<Key, string> = {
   q: "Search", country: "Country", city: "City", format: "Format", category: "Category",
@@ -43,7 +43,10 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
     .or(`registration_deadline.is.null,registration_deadline.gte."${new Date().toISOString()}"`) // hide passed deadlines
     .order("first_seen_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
-  if (f.q) query = query.ilike("title", `%${f.q}%`);
+  if (f.q) {
+    const term = `%${f.q}%`;
+    query = query.or(`title.ilike.${term},organizer.ilike.${term},description.ilike.${term},city.ilike.${term}`);
+  }
   if (f.country) query = query.ilike("country", f.country);
   if (f.city) query = query.ilike("city", `%${f.city}%`);
   if (f.format) query = query.eq("format", f.format);

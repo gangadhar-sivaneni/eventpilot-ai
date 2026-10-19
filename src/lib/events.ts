@@ -59,6 +59,19 @@ export function sourceName(e: { event_sources?: { name: string } | null; url?: s
   const u = (e.url ?? "").toLowerCase();
   const org = (e.organizer ?? "").toLowerCase();
 
+  if (u.includes("mlrit.ac.in") || org.includes("mlrit") || org.includes("marri laxman") || u.includes("equinox")) return "MLRIT Hyderabad";
+  if (u.includes("microsoft.com") || org.includes("microsoft") || u.includes("imaginecup")) return "Microsoft";
+  if (u.includes("google.com") || org.includes("google") || org.includes("gdsc")) return "Google";
+  if (u.includes("amazon") || org.includes("amazon")) return "Amazon";
+  if (u.includes("flipkart") || org.includes("flipkart")) return "Flipkart";
+  if (u.includes("nvidia") || org.includes("nvidia")) return "NVIDIA";
+  if (org.includes("tata") || u.includes("tata")) return "Tata Group";
+  if (u.includes("ibm.com") || org.includes("ibm") || u.includes("callforcode")) return "IBM";
+  if (u.includes("kmit.in") || org.includes("kmit")) return "KMIT Hyderabad";
+  if (u.includes("griet.ac.in") || org.includes("griet")) return "GRIET Hyderabad";
+  if (u.includes("bvrit.ac.in") || org.includes("bvrit")) return "BVRIT Hyderabad";
+  if (u.includes("sreenidhi.edu.in") || org.includes("snist") || org.includes("sreenidhi") || u.includes("roboveda")) return "SNIST Hyderabad";
+
   if (u.includes("unstop.com")) return "Unstop";
   if (u.includes("devpost.com")) return "Devpost";
   if (u.includes("devfolio.co")) return "Devfolio";
