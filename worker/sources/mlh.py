@@ -15,6 +15,14 @@ def season(now: datetime) -> int:
 
 
 def parse(e: dict) -> dict:
+    now_iso = datetime.now(timezone.utc).isoformat()
+    starts = e.get("startsAt")
+    ends = e.get("endsAt")
+    if starts and starts < now_iso:
+        return None
+    if ends and ends < now_iso:
+        return None
+
     venue = e.get("venueAddress") or {}
     return {
         "external_id": e["id"],
@@ -24,8 +32,10 @@ def parse(e: dict) -> dict:
         "format": {"physical": "in_person", "digital": "online", "hybrid": "hybrid"}.get(e.get("formatType")),
         "city": venue.get("city") or e.get("location"),
         "country": venue.get("country"),
-        "starts_at": e.get("startsAt"),
-        "ends_at": e.get("endsAt"),
+        "starts_at": starts,
+        "ends_at": ends,
+        "registration_deadline": starts,
+        "registration_status": "open",
         "categories": ["hackathon", "student", "mlh"],
     }
 

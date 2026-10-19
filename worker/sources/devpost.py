@@ -35,6 +35,12 @@ def parse(h: dict) -> dict | None:
     starts, ends = period(h.get("submission_period_dates") or "")
     prize = re.sub(r"<[^>]+>", "", h.get("prize_amount") or "").strip()
     has_cash = (h.get("prizes_counts") or {}).get("cash") and prize.strip("$€£₹0,. ")
+    from datetime import datetime, timezone
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    # Skip ended or past hackathons
+    if ends and ends < today_iso:
+        return None
+
     return {
         "external_id": h["id"],
         "url": h["url"],
@@ -43,8 +49,9 @@ def parse(h: dict) -> dict | None:
         "format": "online" if loc.lower() == "online" else ("in_person" if loc else None),
         "city": None if loc.lower() == "online" else loc,
         "starts_at": starts,
-        "ends_at": ends,  # submission period end; Devpost does not publish a separate registration deadline
-        "registration_status": {"open": "open", "upcoming": "upcoming", "ended": "closed"}.get(h.get("open_state")),
+        "ends_at": ends,
+        "registration_deadline": ends,  # Submission deadline
+        "registration_status": "open" if (ends and ends >= today_iso) else "closed",
         "prize_text": prize if has_cash else None,
         "categories": ["hackathon"] + [t["name"] for t in h.get("themes") or []],
     }

@@ -37,10 +37,12 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   const page = Math.max(1, Number(f.page) || 1);
   const { supabase, user } = await getUser();
 
+  const nowIso = new Date().toISOString();
   let query = supabase
     .from("events")
     .select(EVENT_COLUMNS, { count: "exact" })
-    .or(`registration_deadline.is.null,registration_deadline.gte."${new Date().toISOString()}"`) // hide passed deadlines
+    .gte("registration_deadline", nowIso) // strictly unexpired future deadlines only
+    .neq("registration_status", "closed")
     .order("first_seen_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
   if (f.q) {

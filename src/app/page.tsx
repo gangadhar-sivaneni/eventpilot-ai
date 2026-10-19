@@ -30,7 +30,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
   const { supabase, user } = await getUser();
   const { next, error, deleted } = await searchParams;
   const nowIso = new Date().toISOString();
-  const open = `registration_deadline.is.null,registration_deadline.gte."${nowIso}"`;
+  const open = `registration_deadline.gte."${nowIso}"`;
 
   // Real numbers only: if the catalogue is unreachable the band is hidden rather than faked.
   const [all, prize, latest, picks] = await Promise.all([
