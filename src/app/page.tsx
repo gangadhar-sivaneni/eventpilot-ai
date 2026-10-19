@@ -4,7 +4,7 @@ import {
   ScanSearch, ShieldCheck, Trophy, UserRound, Wallet,
 } from "lucide-react";
 import { getUser } from "@/lib/auth";
-import { EVENT_COLUMNS, type EventRow } from "@/lib/events";
+import { EVENT_COLUMNS, sourceName, type EventRow } from "@/lib/events";
 import { Radar } from "@/components/radar";
 import { SignInButton } from "@/components/sign-in-button";
 import { LocalTime } from "@/components/local-time";
@@ -94,7 +94,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
                 >
                   <div className="flex items-center justify-between gap-3">
                     <StatusPill status={e.registration_status} />
-                    <span className="hidden truncate font-mono text-[0.7rem] text-faint sm:inline">{e.event_sources?.name ?? "Verified Source"}</span>
+                    <span className="hidden truncate font-mono text-[0.7rem] font-medium text-accent sm:inline">{sourceName(e)}</span>
                   </div>
                   <p className="mt-2 line-clamp-1 font-display text-lg font-semibold">{e.title}</p>
                   <div className="mt-2 flex items-center justify-between gap-3">

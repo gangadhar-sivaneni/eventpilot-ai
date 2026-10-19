@@ -51,3 +51,38 @@ export const STATUS_LABEL: Record<EventRow["registration_status"], string> = {
 export function place(e: Pick<EventRow, "city" | "country" | "format">) {
   return [e.city, e.country].filter(Boolean).join(", ") || FORMAT_LABEL[e.format];
 }
+
+export function sourceName(e: { event_sources?: { name: string } | null; url?: string; organizer?: string | null }): string {
+  if (e.event_sources?.name && !e.event_sources.name.toLowerCase().includes("unknown")) {
+    return e.event_sources.name.replace(/ opportunities| challenges| hackathons/i, "");
+  }
+  const u = (e.url ?? "").toLowerCase();
+  const org = (e.organizer ?? "").toLowerCase();
+
+  if (u.includes("unstop.com")) return "Unstop";
+  if (u.includes("devpost.com")) return "Devpost";
+  if (u.includes("devfolio.co")) return "Devfolio";
+  if (u.includes("hackerearth.com")) return "HackerEarth";
+  if (u.includes("mlh.io")) return "Major League Hacking";
+  if (u.includes("iiit.ac.in") || org.includes("iiit hyderabad")) return "IIIT Hyderabad";
+  if (u.includes("iith.ac.in") || org.includes("iit hyderabad") || org.includes("tihan")) return "IIT Hyderabad";
+  if (u.includes("cbit.ac.in") || org.includes("cbit")) return "CBIT Hyderabad";
+  if (u.includes("vnrvjiet.ac.in") || org.includes("vnr")) return "VNR VJIET";
+  if (u.includes("t-hub.co") || org.includes("t-hub")) return "T-Hub Hyderabad";
+  if (u.includes("tworks") || org.includes("t-works")) return "T-Works Hyderabad";
+  if (u.includes("bits-pilani.ac.in") || org.includes("bits pilani")) return "BITS Pilani Hyderabad";
+  if (u.includes("jntuh.ac.in") || org.includes("jntu")) return "JNTU Hyderabad";
+  if (u.includes("vce.ac.in") || org.includes("vasavi")) return "Vasavi College";
+  if (u.includes("osmania.ac.in") || org.includes("osmania")) return "Osmania University";
+  if (org.includes("mjcet") || org.includes("muffakham")) return "MJCET Banjara Hills";
+  if (org.includes("icfai") || org.includes("ibs")) return "ICFAI Hyderabad";
+  
+  if (e.organizer) return e.organizer.split(",")[0].trim();
+
+  try {
+    const host = new URL(e.url ?? "").hostname.replace(/^www\./, "");
+    if (host) return host;
+  } catch {}
+  return "Verified Event Source";
+}
+

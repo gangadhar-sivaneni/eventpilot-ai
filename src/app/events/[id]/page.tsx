@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowUpRight, Building2, CircleAlert, Clock, FileText, Tag, Trophy } from "lucide-react";
 import { getUser } from "@/lib/auth";
-import { EVENT_COLUMNS, FORMAT_LABEL, type EventRow } from "@/lib/events";
+import { EVENT_COLUMNS, FORMAT_LABEL, sourceName, type EventRow } from "@/lib/events";
 import { LocalTime } from "@/components/local-time";
 import { SignInButton } from "@/components/sign-in-button";
 import { SubmitButton } from "@/components/submit-button";
@@ -93,7 +93,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
             </div>
             <div>
               <p className="eyebrow">Source</p>
-              <p className="mt-2 text-dim">{e.event_sources?.name ?? "Unknown"}</p>
+              <p className="mt-2 font-medium text-accent">{sourceName(e)}</p>
             </div>
             <div>
               <p className="eyebrow">Last checked</p>

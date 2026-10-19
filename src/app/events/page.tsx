@@ -16,11 +16,12 @@ type Key = (typeof FILTER_KEYS)[number];
 type Filters = Partial<Record<Key | "page", string>>;
 
 const QUICK: [string, Partial<Record<Key, string>>][] = [
+  ["📍 Hyderabad", { city: "Hyderabad" }],
   ["Open now", { status: "open" }],
   ["Prize money", { prize: "1" }],
   ["Free", { fee: "free" }],
-  ["Online", { format: "online" }],
   ["In person", { format: "in_person" }],
+  ["Online", { format: "online" }],
   ["Hackathons", { category: "hackathon" }],
   ["Workshops", { category: "workshop" }],
   ["College", { category: "college" }],

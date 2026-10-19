@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight, Clock } from "lucide-react";
-import type { EventRow } from "@/lib/events";
+import { sourceName, type EventRow } from "@/lib/events";
 import { LocalTime } from "@/components/local-time";
 import { FeePill, PlacePill, PrizePill, StatusPill } from "@/components/ui";
 
@@ -10,7 +10,7 @@ export function EventCard({ e, i = 0 }: { e: EventRow; i?: number }) {
       <div className="flex flex-wrap items-center gap-2">
         <StatusPill status={e.registration_status} />
         <FeePill e={e} />
-        <span className="ml-auto font-mono text-[0.68rem] text-faint">{e.event_sources?.name ?? "Unknown source"}</span>
+        <span className="ml-auto font-mono text-[0.68rem] font-medium text-accent">{sourceName(e)}</span>
       </div>
       <h3 className="mt-4 line-clamp-2 text-xl font-semibold leading-snug">
         <Link href={`/events/${e.id}`} className="after:absolute after:inset-0 after:rounded-[1.1rem] focus-visible:outline-none">
