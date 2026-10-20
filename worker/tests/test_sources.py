@@ -1,7 +1,7 @@
 """Source parsers against trimmed real responses (captured 2026-10-18)."""
 from datetime import datetime
 
-from sources import college_rss, devfolio, devpost, hackerearth, mlh, unstop
+from scrapers import college_rss, devfolio, devpost, hackerearth, mlh, unstop
 
 
 def test_devpost_period_and_parse():

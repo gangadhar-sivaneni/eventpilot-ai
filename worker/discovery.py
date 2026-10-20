@@ -10,7 +10,7 @@ import traceback
 
 import db
 from normalize import canonical_url, normalize
-from sources import REGISTRY
+from scrapers import REGISTRY
 
 ENUMS = {"format", "fee_status", "registration_status"}
 

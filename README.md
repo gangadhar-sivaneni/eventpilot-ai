@@ -23,8 +23,7 @@ Google sign-in ─► Next.js website (Vercel) ─► Supabase Postgres (RLS on 
 | [src/lib](src/lib) | Supabase clients, auth helpers (`requireUser`), event/profile/registration helpers |
 | [supabase/migrations](supabase/migrations) | The whole schema: 10 tables, RLS policies, column grants, seed sources |
 | [supabase/tests/rls.test.mjs](supabase/tests/rls.test.mjs) | Applies the migration to real Postgres (PGlite) and checks RLS with two accounts, offline |
-| [worker](worker) | Automation suite: discovery, matching, notification, and registration agent ([worker/README.md](worker/README.md)) |
-| [worker/sources](worker/sources) | One adapter per source: Devpost, Unstop, Devfolio, HackerEarth, MLH, college RSS, synthetic |
+| [worker/scrapers.py](worker/scrapers.py) | Unified scraper engine: Devpost, Unstop, Devfolio, HackerEarth, MLH, college RSS, and Tech Community summits |
 | [worker/net.py](worker/net.py) | The only way the worker reaches the internet: allowlist, SSRF guard, robots.txt, retries, rate limit |
 | [worker/normalize.py](worker/normalize.py) | Canonical URLs, UTC dates, fee/status rules ("unknown" is never "free") |
 | [worker/discovery.py](worker/discovery.py) | Imports events; idempotent upserts, per-source locks and health records |

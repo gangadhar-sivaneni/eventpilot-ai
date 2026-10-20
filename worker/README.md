@@ -49,8 +49,7 @@ This directory contains the background workers, event discovery scrapers, recomm
 | [`registration.py`](registration.py) | Local agent that inspects registration forms in a visible Chromium window and prepares proposed answers from user profiles. |
 | [`db.py`](db.py) | Supabase client setup, job concurrency locks (`start_job`, `finish_job`), and utility functions. |
 | [`net.py`](net.py) | Secure network client with SSRF protection, robots.txt compliance, domain allowlist, rate limiting, and retries. |
-| [`normalize.py`](normalize.py) | Normalizes raw event data into strict canonical formats (UTC timestamps, canonical URLs, fee parsing). |
-| [`sources/`](sources/) | Pluggable source adapters (`devpost`, `unstop`, `devfolio`, `hackerearth`, `mlh`, `college_rss`, `synthetic`). |
+| [`scrapers.py`](scrapers.py) | Unified scraper engine containing all platform adapters: Devpost, Unstop, Devfolio, HackerEarth, MLH, College RSS, and Tech Community summits. |
 | [`tests/`](tests/) | Pytest test suite covering normalization, network safety, matching logic, and discovery pipelines. |
 
 ---

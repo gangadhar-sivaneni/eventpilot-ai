@@ -1,6 +1,27 @@
-"""Source adapters. Each module has KEY, ALLOWED_HOSTS and fetch() -> iterable of raw event dicts
-(keys as in the `events` table, values loosely typed). Parsing lives here; validation lives in normalize.py."""
-from . import college_rss, devfolio, devpost, hackerearth, mlh, synthetic, tech_community, unstop
+"""Unified scrapers re-exports.
+All scrapers have been consolidated into the single module `worker/scrapers.py`.
+This module maintains backward compatibility for any existing imports from `sources`.
+"""
+from scrapers import (
+    REGISTRY,
+    college_rss,
+    devfolio,
+    devpost,
+    hackerearth,
+    mlh,
+    synthetic,
+    tech_community,
+    unstop,
+)
 
-REGISTRY = {m.KEY: m for m in (synthetic, devpost, unstop, devfolio, hackerearth, mlh, college_rss, tech_community)}
-
+__all__ = [
+    "REGISTRY",
+    "college_rss",
+    "devfolio",
+    "devpost",
+    "hackerearth",
+    "mlh",
+    "synthetic",
+    "tech_community",
+    "unstop",
+]
