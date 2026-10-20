@@ -20,6 +20,7 @@ async function load(form: FormData) {
 
 export async function runPreparation(form: FormData) {
   const { supabase, user, reg } = await load(form);
+  if (!EDITABLE.includes(reg.status)) throw new Error("Registration cannot be prepared in current status");
   const [{ data: profile }, { data: answers }] = await Promise.all([
     supabase.from("profiles").select("*").eq("user_id", user.id).single(),
     supabase.from("registration_answers").select("question, answer").eq("user_id", user.id),

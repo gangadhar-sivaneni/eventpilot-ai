@@ -99,6 +99,8 @@ def main(keys: list[str]) -> None:
     q = db.client().table("event_sources").select("id, key").eq("enabled", True)
     if keys:
         q = q.in_("key", keys)
+    else:
+        q = q.in_("key", list(REGISTRY.keys()))
     for source in q.order("key").execute().data:
         run_source(source)
 

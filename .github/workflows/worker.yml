@@ -22,11 +22,10 @@ jobs:
       GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
       SITE_URL: ${{ vars.SITE_URL }}
     steps:
-      - name: Not configured yet
-        if: env.SUPABASE_URL == ''
-        run: echo "::notice::Add the SUPABASE_URL and SUPABASE_SECRET_KEY repository secrets to enable the worker (see README)"
       - uses: actions/checkout@v4
-        if: env.SUPABASE_URL != ''
+      - name: Check configuration
+        if: env.SUPABASE_URL == ''
+        run: echo "::notice title=Worker Paused::SUPABASE_URL and SUPABASE_SECRET_KEY repository secrets are not set. Add them to enable background runs."
       - uses: actions/setup-python@v5
         if: env.SUPABASE_URL != ''
         with:

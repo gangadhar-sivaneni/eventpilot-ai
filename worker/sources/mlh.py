@@ -49,5 +49,5 @@ def extract(html: str) -> list[dict]:
 
 def fetch():
     html = http(f"https://www.mlh.com/seasons/{season(datetime.now(timezone.utc))}/events", ALLOWED_HOSTS).text
-    for e in extract(html):
-        yield parse(e)
+    yield from filter(None, map(parse, extract(html)))
+
