@@ -63,6 +63,38 @@ def clean_text(raw, limit: int) -> str | None:
     return text[:limit] or None
 
 
+UNSTOP_OPP_PATTERN = re.compile(
+    r"^https?://(?:www\.)?unstop\.com/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+-(\d{5,9})(?:/.*)?$|"
+    r"^https?://(?:www\.)?unstop\.com/(?:o|p)/(\d{4,9})(?:/.*)?$",
+    re.I
+)
+
+
+def validate_platform_url(url: str | None, *, is_registration: bool = False) -> tuple[str | None, str | None]:
+    """Validate platform-specific URLs to prevent broken slugs or fallback redirects."""
+    if not url:
+        return None, "empty url"
+
+    parts = urlsplit(url)
+    hostname = (parts.hostname or "").lower()
+
+    # 1. Unstop platform validation: opportunity URLs must have an authentic numeric ID suffix
+    if hostname == "unstop.com" or hostname.endswith(".unstop.com"):
+        path = parts.path.lower()
+        if any(path.startswith(prefix) for prefix in (
+            "/competitions", "/hackathons", "/workshops-webinars", "/conferences",
+            "/quizzes", "/cultural-events", "/college-fests", "/o/", "/p/"
+        )):
+            if not UNSTOP_OPP_PATTERN.match(url):
+                return None, "unstop opportunity url missing numeric id (would redirect/404)"
+
+    # 2. General sanity: Reject raw unencoded characters or obvious placeholders
+    if any(c in url for c in ("<", ">", "{", "}", " ", '"', "'")):
+        return None, "url contains unencoded special characters"
+
+    return url, None
+
+
 def fee(raw_status, amount, currency) -> tuple[str, float | None, str | None]:
     status = raw_status if raw_status in ("free", "paid") else "unknown"
     try:
@@ -79,7 +111,15 @@ def fee(raw_status, amount, currency) -> tuple[str, float | None, str | None]:
     return status, amount, currency
 
 
-def registration_status(raw, opens: str | None, deadline: str | None, now: datetime) -> str:
+def registration_status(
+    raw,
+    opens: str | None,
+    deadline: str | None,
+    now: datetime,
+    *,
+    starts: str | None = None,
+    ends: str | None = None
+) -> str:
     if raw in STATUSES and raw != "unknown":
         status = raw
     elif opens and deadline:
@@ -88,33 +128,53 @@ def registration_status(raw, opens: str | None, deadline: str | None, now: datet
         status = "upcoming"
     else:
         status = "unknown"
-    if deadline and now > datetime.fromisoformat(deadline):
-        status = "closed"  # a passed deadline beats whatever the listing claims
+
+    # Strict lifecycle guardrails: expired events must be closed
+    if ends and now > datetime.fromisoformat(ends):
+        status = "closed"
+    elif deadline and now > datetime.fromisoformat(deadline):
+        status = "closed"
+    elif not deadline and starts and now > datetime.fromisoformat(starts):
+        status = "closed"
+
     return status
 
 
 def normalize(raw: dict, now: datetime | None = None) -> tuple[dict | None, str | None]:
     """Returns (row, None) or (None, reason)."""
     now = now or datetime.now(timezone.utc)
-    url = canonical_url(raw.get("url"))
-    if not url:
+    raw_url = canonical_url(raw.get("url"))
+    if not raw_url:
         return None, "invalid url"
+    url, url_err = validate_platform_url(raw_url, is_registration=False)
+    if not url:
+        return None, url_err or "invalid url"
+
     title = clean_text(raw.get("title"), 300)
     if not title or len(title) < 2:
         return None, "missing title"
+
+    raw_reg = canonical_url(raw.get("registration_url"))
+    reg_url, _ = validate_platform_url(raw_reg, is_registration=True) if raw_reg else (None, None)
 
     opens = to_utc(raw.get("registration_opens_at"))
     deadline = to_utc(raw.get("registration_deadline"), end_of_day=True)
     starts, ends = to_utc(raw.get("starts_at")), to_utc(raw.get("ends_at"), end_of_day=True)
     if starts and ends and ends < starts:
         ends = None  # contradictory source data: keep the start, drop the impossible end
+
+    # If registration deadline is missing but starts_at is provided,
+    # default registration_deadline to starts_at (end of that day) so future events are discoverable in search
+    if not deadline and starts:
+        deadline = to_utc(raw.get("starts_at"), end_of_day=True) or starts
+
     fee_status, fee_amount, fee_currency = fee(raw.get("fee_status"), raw.get("fee_amount"), raw.get("fee_currency"))
 
     categories = sorted({c.strip().lower()[:40] for c in raw.get("categories") or [] if c and c.strip()})[:20]
     row = {
         "external_id": str(raw["external_id"])[:200] if raw.get("external_id") not in (None, "") else None,
         "url": url,
-        "registration_url": canonical_url(raw.get("registration_url")),
+        "registration_url": reg_url,
         "title": title,
         "description": clean_text(raw.get("description"), 5000),
         "organizer": clean_text(raw.get("organizer"), 200),
@@ -129,7 +189,9 @@ def normalize(raw: dict, now: datetime | None = None) -> tuple[dict | None, str 
         "fee_amount": fee_amount,
         "fee_currency": fee_currency,
         "prize_text": clean_text(raw.get("prize_text"), 200),
-        "registration_status": registration_status(raw.get("registration_status"), opens, deadline, now),
+        "registration_status": registration_status(
+            raw.get("registration_status"), opens, deadline, now, starts=starts, ends=ends
+        ),
         "eligibility": clean_text(raw.get("eligibility"), 1000),
         "categories": categories,
         "last_checked_at": now.isoformat(),

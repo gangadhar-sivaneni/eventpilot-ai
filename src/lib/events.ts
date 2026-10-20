@@ -99,3 +99,60 @@ export function sourceName(e: { event_sources?: { name: string } | null; url?: s
   return "Verified Event Source";
 }
 
+const UNSTOP_OPP_PATTERN = /^https?:\/\/(?:www\.)?unstop\.com\/(?:(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+-\d{5,9}|(?:o|p)\/\d+)(?:\/.*)?$/i;
+
+/**
+ * Validates that an Unstop URL points to a genuine opportunity with a numeric ID.
+ * Slugs without numeric IDs 404 in Unstop's SPA and redirect to fallback/default events.
+ */
+export function isValidOpportunityUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "unstop.com" || host.endsWith(".unstop.com")) {
+      const path = parsed.pathname.toLowerCase();
+      if (
+        path.startsWith("/competitions") ||
+        path.startsWith("/hackathons") ||
+        path.startsWith("/workshops-webinars") ||
+        path.startsWith("/conferences") ||
+        path.startsWith("/quizzes") ||
+        path.startsWith("/cultural-events") ||
+        path.startsWith("/college-fests") ||
+        path.startsWith("/o/") ||
+        path.startsWith("/p/")
+      ) {
+        return UNSTOP_OPP_PATTERN.test(url);
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns a safe registration URL, or null if the URL is suspect or would redirect to an unintended event.
+ */
+export function safeRegistrationUrl(e: Pick<EventRow, "url" | "registration_url">): string | null {
+  if (e.registration_url && isValidOpportunityUrl(e.registration_url)) {
+    return e.registration_url;
+  }
+  return null;
+}
+
+/**
+ * Returns a guaranteed safe official event page URL.
+ * Never redirects users to a broken/foreign competition slug.
+ */
+export function safeOfficialUrl(e: Pick<EventRow, "url" | "registration_url">): string {
+  if (e.url && isValidOpportunityUrl(e.url)) {
+    return e.url;
+  }
+  if (e.registration_url && isValidOpportunityUrl(e.registration_url)) {
+    return e.registration_url;
+  }
+  return e.url;
+}
+

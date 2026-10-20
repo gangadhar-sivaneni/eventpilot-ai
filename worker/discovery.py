@@ -95,7 +95,29 @@ def run_source(source: dict) -> None:
     print(f"{key}: {'FAILED ' + error if error else 'ok'} {counts}")
 
 
+def close_expired_events() -> int:
+    """Close past events whose deadline has passed so future events searches remain accurate."""
+    now_iso = db.iso(db.now())
+    try:
+        res = (
+            db.client()
+            .table("events")
+            .update({"registration_status": "closed"})
+            .lt("registration_deadline", now_iso)
+            .neq("registration_status", "closed")
+            .execute()
+        )
+        count = len(res.data) if res.data else 0
+        if count > 0:
+            print(f"Housekeeping: closed {count} expired events")
+        return count
+    except Exception as err:
+        print(f"  close_expired_events notice: {err}")
+        return 0
+
+
 def main(keys: list[str]) -> None:
+    close_expired_events()
     q = db.client().table("event_sources").select("id, key").eq("enabled", True)
     if keys:
         q = q.in_("key", keys)

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowUpRight, Building2, CircleAlert, Clock, FileText, Tag, Trophy } from "lucide-react";
 import { getUser } from "@/lib/auth";
-import { EVENT_COLUMNS, FORMAT_LABEL, sourceName, type EventRow } from "@/lib/events";
+import { EVENT_COLUMNS, FORMAT_LABEL, safeOfficialUrl, safeRegistrationUrl, sourceName, type EventRow } from "@/lib/events";
 import { LocalTime } from "@/components/local-time";
 import { SignInButton } from "@/components/sign-in-button";
 import { SubmitButton } from "@/components/submit-button";
@@ -26,6 +26,8 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   const found = await load((await params).id);
   if (!found) notFound();
   const { e, user, now } = found;
+  const officialUrl = safeOfficialUrl(e);
+  const regUrl = safeRegistrationUrl(e);
   const milestones = [
     ["Registration opens", e.registration_opens_at],
     ["Registration closes", e.registration_deadline],
@@ -127,11 +129,13 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
               ) : (
                 <div className="[&>button]:w-full"><SignInButton next={`/events/${e.id}`} label="Sign in to prepare" /></div>
               )}
-              <a href={e.url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost w-full">
-                Official event page <ArrowUpRight aria-hidden="true" /><span className="sr-only">(opens in a new tab)</span>
-              </a>
-              {e.registration_url && e.registration_url !== e.url && (
-                <a href={e.registration_url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost w-full">
+              {officialUrl && (
+                <a href={officialUrl} target="_blank" rel="noopener noreferrer" className="btn btn-ghost w-full">
+                  Official event page <ArrowUpRight aria-hidden="true" /><span className="sr-only">(opens in a new tab)</span>
+                </a>
+              )}
+              {regUrl && regUrl !== officialUrl && (
+                <a href={regUrl} target="_blank" rel="noopener noreferrer" className="btn btn-ghost w-full">
                   Official registration <ArrowUpRight aria-hidden="true" /><span className="sr-only">(opens in a new tab)</span>
                 </a>
               )}

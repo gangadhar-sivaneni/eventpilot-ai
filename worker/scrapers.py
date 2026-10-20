@@ -117,9 +117,16 @@ class unstop:
         org = (o.get("organisation") or {}).get("name")
         addr = o.get("address_with_country_logo") or {}
         region = o.get("region")
+
+        raw_url = o.get("seo_url") or ""
+        if raw_url.startswith("/"):
+            raw_url = f"https://unstop.com{raw_url}"
+        if not re.search(r"-\d{5,9}(?:/.*)?$|/(?:o|p)/\d+", raw_url) and o.get("id"):
+            raw_url = f"https://unstop.com/o/{o['id']}"
+
         return {
             "external_id": o["id"],
-            "url": o["seo_url"],
+            "url": raw_url,
             "title": o["title"],
             "organizer": org,
             "format": {"online": "online", "offline": "in_person", "hybrid": "hybrid"}.get(region),
