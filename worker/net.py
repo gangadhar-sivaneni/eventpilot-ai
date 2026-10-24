@@ -12,7 +12,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 USER_AGENT = "Mozilla/5.0 (compatible; EventPilotBot/0.1; +https://github.com/)"
-TIMEOUT = 20
+TIMEOUT = 30
 MAX_REDIRECTS = 5
 MIN_INTERVAL = 1.0  # seconds between requests to one host
 

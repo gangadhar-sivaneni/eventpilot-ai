@@ -6,14 +6,14 @@ import {
 import { getUser } from "@/lib/auth";
 import { EVENT_COLUMNS, sourceName, type EventRow } from "@/lib/events";
 import { Radar } from "@/components/radar";
-import { SignInButton } from "@/components/sign-in-button";
+import { LoginButton } from "@/components/login-button";
 import { LocalTime } from "@/components/local-time";
 import { Notice, PlacePill, PrizePill, StatusPill } from "@/components/ui";
 
-const SOURCES = ["Devpost", "Unstop", "Devfolio", "HackerEarth", "Major League Hacking", "College feeds"];
+const SOURCES = ["Devpost", "Unstop", "Devfolio", "HackerEarth", "Major League Hacking", "IIT Hyderabad", "College feeds"];
 
 const STEPS = [
-  { icon: ScanSearch, title: "Discover", text: "Every 2 hours the agent checks six permitted sources and normalises dates, fees and prizes." },
+  { icon: ScanSearch, title: "Discover", text: "The agent checks event sources every 10 minutes and keeps event dates separate from registration deadlines." },
   { icon: BellRing, title: "Match", text: "Your interests, cities and fee limit decide what reaches you, in-app and by email." },
   { icon: FileText, title: "Prepare", text: "It reads the form and fills only what maps exactly to your profile. Everything else, it asks." },
   { icon: Hand, title: "You approve", text: "Nothing is sent until you review it. Success is recorded only with a real confirmation." },
@@ -30,14 +30,18 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
   const { supabase, user } = await getUser();
   const { next, error, deleted } = await searchParams;
   const nowIso = new Date().toISOString();
-  const open = `registration_deadline.gte."${nowIso}"`;
+  const freshSince = new Date(Date.parse(nowIso) - 24 * 60 * 60 * 1000).toISOString();
 
   // Real numbers only: if the catalogue is unreachable the band is hidden rather than faked.
   const [all, prize, latest, picks] = await Promise.all([
-    supabase.from("events").select("id", { count: "exact", head: true }).or(open).neq("registration_status", "closed"),
-    supabase.from("events").select("id", { count: "exact", head: true }).or(open).not("prize_text", "is", null),
-    supabase.from("events").select("last_checked_at").order("last_checked_at", { ascending: false }).limit(1),
-    supabase.from("events").select(EVENT_COLUMNS).or(open).eq("registration_status", "open").not("prize_text", "is", null)
+    supabase.from("events").select("id", { count: "exact", head: true }).not("quality_verified_at", "is", null)
+      .gte("last_checked_at", freshSince).or(`starts_at.gte.${nowIso},ends_at.gte.${nowIso}`).neq("registration_status", "closed"),
+    supabase.from("events").select("id", { count: "exact", head: true }).not("quality_verified_at", "is", null)
+      .gte("last_checked_at", freshSince).or(`starts_at.gte.${nowIso},ends_at.gte.${nowIso}`).neq("registration_status", "closed").not("prize_text", "is", null),
+    supabase.from("events").select("last_checked_at").not("quality_verified_at", "is", null)
+      .gte("last_checked_at", freshSince).order("last_checked_at", { ascending: false }).limit(1),
+    supabase.from("events").select(EVENT_COLUMNS).not("quality_verified_at", "is", null)
+      .gte("last_checked_at", freshSince).or(`starts_at.gte.${nowIso},ends_at.gte.${nowIso}`).neq("registration_status", "closed").not("prize_text", "is", null)
       .order("first_seen_at", { ascending: false }).limit(3),
   ]);
   const live = !all.error && (all.count ?? 0) > 0;
@@ -56,22 +60,22 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
             {deleted && <div className="mb-6"><Notice tone="ok">Your account and all of its data were deleted.</Notice></div>}
             <p className="rise inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-dim" style={{ "--i": 0 } as React.CSSProperties}>
               <span className="ping relative h-2 w-2 rounded-full bg-signal" aria-hidden="true" />
-              Scanning {SOURCES.length} sources every 2 hours
+              Hyderabad & India tech events · online events included
             </p>
             <h1 className="mt-6 text-[2.75rem] font-extrabold leading-[1.02] sm:text-6xl lg:text-[4.4rem]">
-              <span className="rise block" style={{ "--i": 1 } as React.CSSProperties}>Find every event</span>
+              <span className="rise block" style={{ "--i": 1 } as React.CSSProperties}>Find tech events</span>
               <span className="rise block" style={{ "--i": 2 } as React.CSSProperties}><span className="marker">first.</span></span>
               <span className="rise block" style={{ "--i": 3 } as React.CSSProperties}>Fill every form right.</span>
             </h1>
             <p className="rise mt-6 max-w-xl text-lg text-dim" style={{ "--i": 4 } as React.CSSProperties}>
-              EventPilot watches hackathons, competitions and workshops worldwide, puts prize-money events first, and
-              prepares registration forms from your profile. You check and approve before anything is sent.
+              EventPilot focuses on technology events in Hyderabad and India, plus online events. Each listing must have
+              a future event date and a recent source check; missing registration details stay marked unknown.
             </p>
             <div className="rise mt-8 flex flex-wrap gap-3" style={{ "--i": 5 } as React.CSSProperties}>
               {user ? (
                 <Link href="/events" className="btn btn-primary">Open your events <ArrowRight aria-hidden="true" /></Link>
               ) : (
-                <SignInButton next={safeNext} label="Start with Google" />
+                <LoginButton next={safeNext} label="Log in / Get started" />
               )}
               <Link href="/events?prize=1" className="btn btn-ghost"><Trophy aria-hidden="true" /> Prize-money events</Link>
             </div>
@@ -85,10 +89,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
           <div className="relative mx-auto w-full max-w-[34rem]">
             <div className="fade-in"><Radar /></div>
             <div className="absolute inset-0 flex flex-col justify-center gap-3 px-2 sm:px-0">
-              {(events.length ? events : FEATURED_FALLBACK).map((e, i) => (
+              {events.map((e, i) => (
                 <Link
                   key={e.id}
-                  href={events.length ? `/events/${e.id}` : "/events"}
+                  href={`/events/${e.id}`}
                   className={`floaty card card-hover block w-[92%] bg-surface/90 p-3.5 backdrop-blur-md sm:w-[72%] sm:p-4 ${i === 1 ? "self-end" : i === 2 ? "sm:ml-[8%]" : ""}`}
                   style={{ "--i": i } as React.CSSProperties}
                 >
@@ -189,7 +193,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
             <h3 className="mt-5 text-2xl font-semibold">Money events, first</h3>
             <p className="mt-2 text-dim">Prize pools are read from each listing and flagged, so cash events never get buried. Filter to them in one tap.</p>
             <div className="mt-6 flex flex-wrap gap-2">
-              {["$138,000", "₹1,00,000", "₹25,000", "$2,000 USDC"].map((p) => <span key={p} className="pill pill-flare"><Trophy aria-hidden="true" />{p}</span>)}
+              {["AI", "Open source", "Cloud", "Cybersecurity"].map((p) => <span key={p} className="pill pill-flare">{p}</span>)}
             </div>
           </article>
           <article className="reveal card card-hover p-7 md:col-span-3">
@@ -264,7 +268,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
           <h2 className="relative mx-auto mt-5 max-w-2xl text-4xl font-bold sm:text-5xl">Let the agent watch. You decide.</h2>
           <p className="relative mx-auto mt-4 max-w-lg font-medium">Set your interests once. Get the right events, and forms ready before the rush.</p>
           <div className="relative mt-8 flex flex-wrap justify-center gap-3">
-            {user ? <Link href="/profile" className="btn btn-dark">Set your interests <ArrowRight aria-hidden="true" /></Link> : <SignInButton next="/profile" label="Start with Google" variant="dark" />}
+            {user ? <Link href="/profile" className="btn btn-dark">Set your interests <ArrowRight aria-hidden="true" /></Link> : <LoginButton next="/profile" label="Log in / Sign up" variant="dark" />}
             <Link href="/events" className="btn btn-ghost">Browse events <ArrowUpRight aria-hidden="true" /></Link>
           </div>
         </div>
@@ -272,9 +276,3 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
     </>
   );
 }
-
-const FEATURED_FALLBACK = [
-  { id: 1, title: "CodeStorm 48-Hour National Hackathon", registration_status: "open", city: "Hyderabad", country: "India", format: "in_person", prize_text: "₹1,50,000", event_sources: { name: "Unstop" } },
-  { id: 2, title: "Global AI Build Challenge", registration_status: "open", city: null, country: null, format: "online", prize_text: "$50,000", event_sources: { name: "Devpost" } },
-  { id: 3, title: "Deccan Design Sprint", registration_status: "open", city: "Hyderabad", country: "India", format: "in_person", prize_text: null, event_sources: { name: "Unstop" } },
-] as unknown as EventRow[];

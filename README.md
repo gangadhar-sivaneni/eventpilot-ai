@@ -1,6 +1,6 @@
 # EventPilot AI
 
-Find hackathons, competitions, workshops and meetups worldwide, get alerts when a match appears, and let an
+Find technology events in Hyderabad and India, plus online events, get alerts when a match appears, and let an
 agent prepare registration forms from your saved profile. **You review and approve before anything is
 submitted.** It cannot guarantee a place: events sell out, queues reject sessions, and eligibility rules apply.
 
@@ -12,7 +12,8 @@ The build plan and milestones are in [plan.md](plan.md).
 ```
 Google sign-in ─► Next.js website (Vercel) ─► Supabase Postgres (RLS on every table)
                                                   ▲            ▲
-       GitHub Actions, every 2 h ─► worker/discovery.py → match_users.py → notify.py (email)
+       GitHub Actions, every 10 min ─► worker/discovery.py → Supabase
+       GitHub Actions, every 2 h ────► match_users.py → notify.py (email)
        Your computer, on demand  ─► worker/registration.py prepare|submit <id>  (visible browser)
 ```
 
@@ -23,7 +24,7 @@ Google sign-in ─► Next.js website (Vercel) ─► Supabase Postgres (RLS on 
 | [src/lib](src/lib) | Supabase clients, auth helpers (`requireUser`), event/profile/registration helpers |
 | [supabase/migrations](supabase/migrations) | The whole schema: 10 tables, RLS policies, column grants, seed sources |
 | [supabase/tests/rls.test.mjs](supabase/tests/rls.test.mjs) | Applies the migration to real Postgres (PGlite) and checks RLS with two accounts, offline |
-| [worker/scrapers.py](worker/scrapers.py) | Unified scraper engine: Devpost, Unstop, Devfolio, HackerEarth, MLH, college RSS, and Tech Community summits |
+| [worker/scrapers.py](worker/scrapers.py) | Source adapters for event platforms, college feeds and the IIT Hyderabad official events calendar |
 | [worker/net.py](worker/net.py) | The only way the worker reaches the internet: allowlist, SSRF guard, robots.txt, retries, rate limit |
 | [worker/normalize.py](worker/normalize.py) | Canonical URLs, UTC dates, fee/status rules ("unknown" is never "free") |
 | [worker/discovery.py](worker/discovery.py) | Imports events; idempotent upserts, per-source locks and health records |
@@ -56,6 +57,18 @@ On macOS/Linux use `.venv/bin/python` instead of `.venv/Scripts/python`.
 memory until the server restarts. Signing out shows the signed-out views. Real keys switch demo mode off automatically.
 After the keys below are in place: `npm run dev` → http://localhost:3000, and `python discovery.py` imports events.
 
+## Catalogue quality rules
+
+- Production discovery never uses hard-coded event listings or the synthetic test source.
+- Only tech-related records with a future event start date are admitted. The current catalogue includes Hyderabad/India events and online events; other in-person locations are left out.
+- Event dates, registration deadlines and registration status stay separate. Devpost submission windows are not presented as event dates or registration deadlines. Missing fields remain unknown.
+- College RSS entries are imported only when the linked official page publishes a Schema.org Event start date and a Hyderabad/India venue. A college article date is not treated as the event date.
+- A listing is shown only after the stricter importer has rechecked it and within 24 hours of its last source check. Legacy rows are hidden until the importer verifies them again.
+
+Apply [the verified-events migration](supabase/migrations/20261024000000_verified_events.sql) to the connected Supabase project before starting the updated website or worker. Existing rows remain in the database and become visible again only after the importer verifies them.
+
+Scheduled discovery runs every 10 minutes after this workflow is on the default branch and both Supabase repository secrets are configured. Each scan runs worker tests and a dependency security audit before writing to the database. GitHub may delay scheduled runs, and a source may delay or remove its own listings, so this is polling rather than real-time monitoring. Event rows are upserted by URL; unchanged facts are preserved while their check timestamp is refreshed. Events are deleted after their published end time (or start time if no end was provided), including database-linked alerts and registrations. Always open the source link before relying on a detail; scraped data cannot guarantee what a publisher has not provided.
+
 ## Using the registration agent
 
 1. On the website, open an event → **Prepare my registration**. Note the registration ID on the Registrations page.
@@ -76,17 +89,17 @@ are marked unsupported, with a link to the official page.
 | Service | Free limit that matters here |
 |---|---|
 | Supabase | 500 MB database, 50k monthly users; **pauses after 7 days without activity** (the 2-hourly worker keeps it awake) |
-| GitHub Actions | Unlimited minutes on public repos, 2,000/month on private (one run ≈ 2–4 min ≈ 1,000 min/month) |
+| GitHub Actions | Unlimited minutes on public repos; private repo quotas depend on plan. A 10-minute scan schedule is about 4,320 runs per 30-day month. |
 | Vercel Hobby | Free for personal, **non-commercial** projects |
 | Gmail SMTP | About 500 recipients/day on a personal account (one digest per user per run) |
-| Scheduling | GitHub may start cron runs late; alerts are not real-time |
+| Scheduling | GitHub may start cron runs late; every-10-minute scans are not real-time |
 
 ## Keys and accounts checklist (do this last)
 
 Every value below is a placeholder until you fill it in. Nothing secret is committed: `.env*` files are git-ignored.
 
 1. **Supabase project** (free) at https://supabase.com/dashboard → New project.
-   - SQL Editor → paste and run [supabase/migrations/20261018000000_init.sql](supabase/migrations/20261018000000_init.sql)
+   - SQL Editor → paste and run the migration files in timestamp order, including [supabase/migrations/20261024000000_verified_events.sql](supabase/migrations/20261024000000_verified_events.sql) and [supabase/migrations/20261024000001_retract_unsubstantiated_seed_events.sql](supabase/migrations/20261024000001_retract_unsubstantiated_seed_events.sql)
      (or `npx supabase link` then `npx supabase db push`).
    - Project Settings → API Keys: copy the **Project URL**, the **publishable** key (`sb_publishable_…`) and the **secret** key (`sb_secret_…`).
 2. **Google sign-in**
@@ -112,7 +125,7 @@ Every value below is a placeholder until you fill it in. Nothing secret is commi
 
 ## Known limits (honest list)
 
-- Discovery covers the listed platforms plus the college feeds in [worker/sources/college_rss.py](worker/sources/college_rss.py); add colleges there. Events posted only on Instagram or WhatsApp are not found.
+- Discovery checks the listed platforms and college feeds in [worker/scrapers.py](worker/scrapers.py). College posts without event dates are excluded. Events posted only on Instagram or WhatsApp are not found.
 - GDG community events are disabled: their robots.txt disallows the API.
 - Devpost publishes submission periods, not registration deadlines, so deadlines for Devpost events show "Not announced".
 - The registration agent supports single-section Google Forms. Multi-section forms, file uploads and payments are left to you.

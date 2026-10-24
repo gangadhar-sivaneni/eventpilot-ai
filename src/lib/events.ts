@@ -53,43 +53,62 @@ export function place(e: Pick<EventRow, "city" | "country" | "format">) {
 }
 
 export function sourceName(e: { event_sources?: { name: string } | null; url?: string; organizer?: string | null }): string {
-  if (e.event_sources?.name && !e.event_sources.name.toLowerCase().includes("unknown")) {
-    return e.event_sources.name.replace(/ opportunities| challenges| hackathons/i, "");
-  }
   const u = (e.url ?? "").toLowerCase();
   const org = (e.organizer ?? "").toLowerCase();
 
-  if (u.includes("mlrit.ac.in") || org.includes("mlrit") || org.includes("marri laxman") || u.includes("equinox")) return "MLRIT Hyderabad";
-  if (u.includes("microsoft.com") || org.includes("microsoft") || u.includes("imaginecup")) return "Microsoft";
+  // 1. High-priority exact brand and campus attribution
+  if (u.includes("microsoft") || org.includes("microsoft")) return "Microsoft";
+  if (u.includes("servicenow") || org.includes("servicenow")) return "ServiceNow";
+  if (u.includes("salesforce") || org.includes("salesforce")) return "Salesforce";
+  if (u.includes("thoughtworks") || org.includes("thoughtworks")) return "Thoughtworks";
+  if (u.includes("t-hub") || org.includes("t-hub")) return "T-Hub Hyderabad";
+  if (u.includes("tworks") || org.includes("t-works")) return "T-Works Hyderabad";
+
+  // Hyderabad Colleges
+  if (u.includes("cbit") || org.includes("cbit") || org.includes("chaitanya bharathi")) return "CBIT Hyderabad";
+  if (u.includes("vnrvjiet") || org.includes("vnr") || org.includes("vjiet") || org.includes("vignana jyothi")) return "VNR VJIET";
+  if (u.includes("vce.ac.in") || org.includes("vasavi")) return "Vasavi College";
+  if (u.includes("iiit.ac.in") || org.includes("iiit hyderabad")) return "IIIT Hyderabad";
+  if (u.includes("iith.ac.in") || org.includes("iit hyderabad") || org.includes("tihan")) return "IIT Hyderabad";
+  if (u.includes("bits-pilani") || u.includes("bits-atmos") || org.includes("bits pilani")) return "BITS Pilani Hyderabad";
+  if (u.includes("osmania.ac.in") || org.includes("osmania") || u.includes("uceou")) return "Osmania University";
+  if (u.includes("jntuh.ac.in") || org.includes("jntu") || org.includes("jawaharlal nehru technological")) return "JNTU Hyderabad";
+  if (u.includes("mjcollege") || org.includes("mjcet") || org.includes("muffakham")) return "MJCET Banjara Hills";
+  if (u.includes("mlrit") || org.includes("mlrit") || org.includes("marri laxman") || u.includes("equinox")) return "MLRIT Hyderabad";
+  if (u.includes("kmit.in") || org.includes("kmit") || org.includes("keshav memorial")) return "KMIT Hyderabad";
+  if (u.includes("griet.ac.in") || org.includes("griet") || org.includes("gokaraju")) return "GRIET Hyderabad";
+  if (u.includes("bvrit.ac.in") || org.includes("bvrit")) return "BVRIT Hyderabad";
+  if (u.includes("sreenidhi.edu.in") || org.includes("snist") || org.includes("sreenidhi") || u.includes("roboveda")) return "SNIST Hyderabad";
+  if (u.includes("ibsindia") || org.includes("icfai") || org.includes("ibs hyderabad")) return "ICFAI / IBS Hyderabad";
+
+  // Tech communities
+  if (u.includes("hydpy") || org.includes("hydpy")) return "HydPy (Python Hyderabad)";
+  if (u.includes("cloudnative") || org.includes("cncf") || org.includes("kubeday")) return "CNCF Hyderabad";
+  if (u.includes("gccx") || org.includes("hysea")) return "HYSEA & GCC X Hyderabad";
+  if (u.includes("aws") && (u.includes("hyderabad") || org.includes("hyderabad"))) return "AWS User Group Hyderabad";
+  if (u.includes("gdg") && (u.includes("hyderabad") || org.includes("hyderabad"))) return "GDG Hyderabad";
+  if (u.includes("fossunited") || org.includes("foss united")) return "FOSS United Hyderabad";
+
+  // Other tech giants
   if (u.includes("google.com") || org.includes("google") || org.includes("gdsc")) return "Google";
   if (u.includes("amazon") || org.includes("amazon")) return "Amazon";
   if (u.includes("flipkart") || org.includes("flipkart")) return "Flipkart";
   if (u.includes("nvidia") || org.includes("nvidia")) return "NVIDIA";
   if (org.includes("tata") || u.includes("tata")) return "Tata Group";
   if (u.includes("ibm.com") || org.includes("ibm") || u.includes("callforcode")) return "IBM";
-  if (u.includes("kmit.in") || org.includes("kmit")) return "KMIT Hyderabad";
-  if (u.includes("griet.ac.in") || org.includes("griet")) return "GRIET Hyderabad";
-  if (u.includes("bvrit.ac.in") || org.includes("bvrit")) return "BVRIT Hyderabad";
-  if (u.includes("sreenidhi.edu.in") || org.includes("snist") || org.includes("sreenidhi") || u.includes("roboveda")) return "SNIST Hyderabad";
 
+  // 2. Specific event source name if provided and not generic
+  if (e.event_sources?.name && !e.event_sources.name.toLowerCase().includes("unknown") && !e.event_sources.name.toLowerCase().includes("tech community")) {
+    return e.event_sources.name.replace(/ opportunities| challenges| hackathons/i, "");
+  }
+
+  // 3. Fall back to platforms
   if (u.includes("unstop.com")) return "Unstop";
   if (u.includes("devpost.com")) return "Devpost";
   if (u.includes("devfolio.co")) return "Devfolio";
   if (u.includes("hackerearth.com")) return "HackerEarth";
   if (u.includes("mlh.io")) return "Major League Hacking";
-  if (u.includes("iiit.ac.in") || org.includes("iiit hyderabad")) return "IIIT Hyderabad";
-  if (u.includes("iith.ac.in") || org.includes("iit hyderabad") || org.includes("tihan")) return "IIT Hyderabad";
-  if (u.includes("cbit.ac.in") || org.includes("cbit")) return "CBIT Hyderabad";
-  if (u.includes("vnrvjiet.ac.in") || org.includes("vnr")) return "VNR VJIET";
-  if (u.includes("t-hub.co") || org.includes("t-hub")) return "T-Hub Hyderabad";
-  if (u.includes("tworks") || org.includes("t-works")) return "T-Works Hyderabad";
-  if (u.includes("bits-pilani.ac.in") || org.includes("bits pilani")) return "BITS Pilani Hyderabad";
-  if (u.includes("jntuh.ac.in") || org.includes("jntu")) return "JNTU Hyderabad";
-  if (u.includes("vce.ac.in") || org.includes("vasavi")) return "Vasavi College";
-  if (u.includes("osmania.ac.in") || org.includes("osmania")) return "Osmania University";
-  if (org.includes("mjcet") || org.includes("muffakham")) return "MJCET Banjara Hills";
-  if (org.includes("icfai") || org.includes("ibs")) return "ICFAI Hyderabad";
-  
+
   if (e.organizer) return e.organizer.split(",")[0].trim();
 
   try {

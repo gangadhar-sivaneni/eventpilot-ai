@@ -10,12 +10,34 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const bounce = () => {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/login";
     url.search = `?next=${encodeURIComponent(path)}`;
     return NextResponse.redirect(url);
   };
   const isProtected = PROTECTED.some((p) => path.startsWith(p));
-  if (DEMO) return isProtected && request.cookies.get("demo_out") ? bounce() : NextResponse.next();
+  const isSetPasswordPage = path.startsWith("/auth/set-password");
+  const isCallbackPage = path.startsWith("/auth/callback");
+  const isLoginPage = path.startsWith("/login");
+
+  if (DEMO) {
+    const demoOut = Boolean(request.cookies.get("demo_out"));
+    const needsPassword = Boolean(request.cookies.get("needs_password"));
+
+    if (demoOut) {
+      if (isProtected || isSetPasswordPage) return bounce();
+      return NextResponse.next();
+    }
+
+    // Demo user is signed in
+    if (needsPassword && !isSetPasswordPage && !isCallbackPage && !isLoginPage) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/auth/set-password";
+      url.search = `?next=${encodeURIComponent(path)}`;
+      return NextResponse.redirect(url);
+    }
+
+    return NextResponse.next();
+  }
 
   let response = NextResponse.next({ request });
   const supabase = createServerClient(
@@ -35,9 +57,26 @@ export async function proxy(request: NextRequest) {
   );
 
   const { data } = await supabase.auth.getClaims();
-  return !data?.claims && isProtected ? bounce() : response;
+  const claims = data?.claims;
+  const isUser = Boolean(claims);
+
+  if (!isUser) {
+    if (isProtected || isSetPasswordPage) return bounce();
+    return response;
+  }
+
+  // Authenticated user: verify if mandatory Google password setup is pending
+  const needsPassword = request.cookies.get("needs_password")?.value === "1";
+  if (needsPassword && !isSetPasswordPage && !isCallbackPage && !isLoginPage) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/set-password";
+    url.search = `?next=${encodeURIComponent(path)}`;
+    return NextResponse.redirect(url);
+  }
+
+  return response;
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: ["/((?!_next|api|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };

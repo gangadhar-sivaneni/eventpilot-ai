@@ -49,7 +49,7 @@ This directory contains the background workers, event discovery scrapers, recomm
 | [`registration.py`](registration.py) | Local agent that inspects registration forms in a visible Chromium window and prepares proposed answers from user profiles. |
 | [`db.py`](db.py) | Supabase client setup, job concurrency locks (`start_job`, `finish_job`), and utility functions. |
 | [`net.py`](net.py) | Secure network client with SSRF protection, robots.txt compliance, domain allowlist, rate limiting, and retries. |
-| [`scrapers.py`](scrapers.py) | Unified scraper engine containing all platform adapters: Devpost, Unstop, Devfolio, HackerEarth, MLH, College RSS, and Tech Community summits. |
+| [`scrapers.py`](scrapers.py) | Source adapters for Devpost, Unstop, Devfolio, HackerEarth, MLH, IIT Hyderabad's official events calendar, and dated Schema.org college events. |
 | [`tests/`](tests/) | Pytest test suite covering normalization, network safety, matching logic, and discovery pipelines. |
 
 ---
@@ -88,6 +88,8 @@ Required variables:
 ---
 
 ## Running the Pipelines
+
+The GitHub Actions worker checks sources every 10 minutes. It runs `pytest` and `pip-audit` before discovery; a failed check prevents database writes. Event facts are upserted by canonical URL, unchanged facts only refresh their verification/check timestamps, and an event is deleted after its published end time (or start time if no end time is known). The 2-hour schedule separately handles matching and email digests. Scheduled runs require `SUPABASE_URL` and `SUPABASE_SECRET_KEY` repository secrets and the workflow on the default branch.
 
 ### Run Event Discovery
 Fetch events from all registered sources:

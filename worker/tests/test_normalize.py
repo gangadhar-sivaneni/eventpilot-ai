@@ -65,7 +65,7 @@ def test_normalize_rejects_invalid_and_cleans_valid():
     row_fake, err_fake = normalize({"url": "https://unstop.com/competitions/acumen-vasavi-2026", "title": "Acumen"}, NOW)
     assert row_fake is None and "missing numeric id" in err_fake
 
-    # Missing deadline with future start date defaults deadline to start date
+    # An event date must not be copied into the registration deadline.
     row_future, err_future = normalize({
         "url": "https://vce.ac.in/acumen",
         "title": "Acumen 2026 - Vasavi",
@@ -73,7 +73,7 @@ def test_normalize_rejects_invalid_and_cleans_valid():
         "format": "in_person"
     }, NOW)
     assert err_future is None
-    assert row_future["registration_deadline"] == "2026-11-18T23:59:59+00:00"
+    assert row_future["registration_deadline"] is None
     assert row_future["registration_status"] == "unknown"
 
     row, err = normalize({"url": "https://a.com/e/", "title": "  <b>Big</b>   Hack ", "format": "Offline",
@@ -82,3 +82,20 @@ def test_normalize_rejects_invalid_and_cleans_valid():
     assert row["url"] == "https://a.com/e" and row["title"] == "Big Hack" and row["format"] == "in_person"
     assert row["categories"] == ["ai", "web"]
     assert row["fee_status"] == "unknown" and row["ends_at"] is None  # impossible end date dropped
+
+
+def test_registration_deadline_is_never_used_as_event_start_or_lifetime():
+    missing_start, missing_reason = normalize({
+        "url": "https://example.com/event",
+        "title": "A real technology event",
+        "registration_deadline": "2026-11-30",
+    }, NOW)
+    assert missing_start is None and missing_reason == "missing event start date"
+
+    completed, completed_reason = normalize({
+        "url": "https://example.com/event",
+        "title": "A real technology event",
+        "starts_at": "2026-10-10",
+        "registration_deadline": "2026-11-30",
+    }, NOW)
+    assert completed is None and completed_reason == "event has already ended"

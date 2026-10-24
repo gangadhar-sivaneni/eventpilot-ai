@@ -76,7 +76,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
 
           <section id="details" className="card scroll-mt-24 p-6 sm:p-8" aria-labelledby="h-details">
             <h2 id="h-details" className="text-2xl font-semibold">Details</h2>
-            <p className="mt-1 text-sm text-faint">Signed in as {p?.email}. Email comes from Google and cannot be changed here.</p>
+            <p className="mt-1 text-sm text-faint">Signed in as {p?.email}. Verified account email cannot be changed here.</p>
             <form action={saveProfile} className="mt-6 space-y-8">
               {PROFILE_GROUPS.map((g) => (
                 <fieldset key={g}>
