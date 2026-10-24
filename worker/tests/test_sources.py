@@ -47,6 +47,42 @@ def test_unstop_does_not_use_registration_deadline_as_event_date():
     assert row["registration_deadline"].startswith("2026-12-01")
 
 
+def test_unstop_uses_published_activity_dates_and_skips_registration_windows():
+    starts, ends = unstop.published_event_window({
+        "rounds": [
+            {"details": [{"title": "Registrations Start", "start_date": "2026-10-17T00:00:00+05:30",
+                          "end_date": "2026-10-31T10:00:00+05:30"}]},
+            {"details": [{"title": "Kickoff Call & Release of Problem Statement",
+                          "start_date": "2026-10-31T11:00:00+05:30", "end_date": "2026-10-31T12:30:00+05:30"}]},
+            {"details": [{"title": "Project Submission", "start_date": "2026-10-31T16:00:00+05:30",
+                          "end_date": "2026-11-01T18:00:00+05:30"}]},
+            {"is_hidden": 1, "details": [{"title": "Final Round", "start_date": "2026-11-05T00:00:00+05:30"}]},
+        ]
+    })
+    assert starts == "2026-10-31T11:00:00+05:30"
+    assert ends == "2026-11-01T18:00:00+05:30"
+    assert unstop.published_event_window({"rounds": [{"details": [{"title": "Final", "start_date": "2026-11-01 09:00"}]}]}) == (None, None)
+
+    # Generic listing start/end are not event facts: they may be registration dates.
+    row = unstop.parse({"id": 2, "title": "AI Hackathon", "seo_url": "https://unstop.com/o/2",
+                        "start_date": "2026-10-24T00:00:00+05:30", "end_date": "2026-10-31T23:59:00+05:30",
+                        "regnRequirements": {"end_regn_dt": "2026-10-31T23:59:00+05:30"}}, "hackathons")
+    assert row["starts_at"] is None and row["ends_at"] is None
+    explicit = unstop.parse({"id": 2, "title": "AI Hackathon", "seo_url": "https://unstop.com/o/2",
+                             "event_start_date": "2026-11-01T10:00:00+05:30",
+                             "event_end_date": "2026-11-02T18:00:00+05:30"}, "hackathons")
+    assert explicit["starts_at"] == "2026-11-01T10:00:00+05:30"
+    assert explicit["ends_at"] == "2026-11-02T18:00:00+05:30"
+
+
+def test_unstop_enriches_only_tech_events_in_supported_geography():
+    assert unstop.needs_event_detail({"title": "AI Hackathon", "categories": ["hackathon"], "format": "online"})
+    assert unstop.needs_event_detail({"title": "Cloud Workshop", "description": "Learn cloud computing",
+                                      "categories": ["workshop"], "city": "Hyderabad", "country": "India"})
+    assert not unstop.needs_event_detail({"title": "Cultural Fest", "categories": ["festival"], "city": "Hyderabad"})
+    assert not unstop.needs_event_detail({"title": "AI Hackathon", "categories": ["hackathon"], "city": "London"})
+
+
 def test_devfolio_prize_needs_money():
     base = {"uuid": "u1", "slug": "arkiv", "name": "Arkiv", "is_online": True, "themes": [], "hackathon_setting": {}}
     assert devfolio.parse({**base, "prizes": [{"desc": "Swag"}, {"desc": "Devcon ticket + $2,000 USDC"}]})["prize_text"] == "Devcon ticket + $2,000 USDC"
