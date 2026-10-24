@@ -93,6 +93,15 @@ class unstop:
     CURRENCY = {"fa-rupee": "INR", "fa-dollar": "USD", "fa-euro": "EUR"}
     SYMBOL = {"INR": "₹", "USD": "$", "EUR": "€"}
     COLLEGE = re.compile(r"institute|college|university|\biit|\biim|\bnit\b|iiit|vidyalaya|engineering|school of", re.I)
+    TECH = re.compile(
+        r"\b(software|developer|programming|coding|hackathon|ideathon|artificial intelligence|ai|"
+        r"machine learning|data science|cyber ?security|cloud computing|web development|app development|"
+        r"robotics|blockchain|open source|computer science|technology|tech fest|iot|hardware|"
+        r"devops|kubernetes|fintech|engineering|semiconductor|photonics|electronics|information security)\b",
+        re.I,
+    )
+    TECH_KIND = re.compile(r"\b(conference|symposium|summit|conclave|workshop|bootcamp|expo|seminar|webinar)\b", re.I)
+    REGISTRATION_STAGE = re.compile(r"\b(registrations?|enrol(?:l)?ments?)\b|whatsapp group|join (?:the )?(?:official )?group", re.I)
 
     @staticmethod
     def india_time(value, country: str | None, *, end_of_day: bool = False):
@@ -118,6 +127,51 @@ class unstop:
         return f"{cls.SYMBOL.get(code, code + ' ')}{cash:,}"
 
     @classmethod
+    def published_event_window(cls, competition: dict) -> tuple[str | None, str | None]:
+        """Read organizer-published activity dates, excluding registration-only stages."""
+        stages = []
+        for round_info in competition.get("rounds") or []:
+            if round_info.get("is_inactive") or round_info.get("is_hidden"):
+                continue
+            for detail in round_info.get("details") or []:
+                title = str(detail.get("title") or "")
+                start = detail.get("start_date")
+                end = detail.get("end_date") or start
+                if cls.REGISTRATION_STAGE.search(title) or not start:
+                    continue
+                try:
+                    start_dt = datetime.fromisoformat(str(start).replace("Z", "+00:00"))
+                    end_dt = datetime.fromisoformat(str(end).replace("Z", "+00:00")) if end else start_dt
+                except (TypeError, ValueError):
+                    continue
+                # Do not guess a timezone for organizer-supplied wall-clock values.
+                if start_dt.tzinfo is None or end_dt.tzinfo is None:
+                    continue
+                if end_dt < start_dt:
+                    continue
+                stages.append((start_dt, end_dt))
+        if not stages:
+            return None, None
+        first = min(stages, key=lambda item: item[0])[0]
+        last = max(stages, key=lambda item: item[1])[1]
+        return first.isoformat(), last.isoformat()
+
+    @classmethod
+    def needs_event_detail(cls, row: dict) -> bool:
+        """Only spend a detail request when a dated tech listing could pass catalogue scope."""
+        title = str(row.get("title") or "")
+        title_and_categories = " ".join([title, *(str(v) for v in row.get("categories") or [])])
+        description = str(row.get("description") or "")
+        tech = bool(cls.TECH.search(title_and_categories)) or bool(
+            cls.TECH_KIND.search(title) and cls.TECH.search(description)
+        )
+        fmt = str(row.get("format") or "").lower()
+        city = str(row.get("city") or "").lower()
+        country = str(row.get("country") or "").lower()
+        in_region = fmt in {"online", "virtual", "digital", "remote"} or country in {"india", "in"} or "hyderabad" in city
+        return tech and in_region
+
+    @classmethod
     def parse(cls, o: dict, kind: str) -> dict:
         reg = o.get("regnRequirements") or {}
         org = (o.get("organisation") or {}).get("name")
@@ -134,8 +188,10 @@ class unstop:
 
         # Event dates and registration dates describe different timelines.
         # Missing event dates stay missing and are rejected by normalize().
-        start_raw = o.get("start_date") or o.get("startDate")
-        end_raw = o.get("end_date") or o.get("endDate")
+        # Generic top-level start_date/end_date are opportunity lifecycle fields and
+        # can match registration windows. Only explicitly named event fields count.
+        start_raw = o.get("event_start_date") or o.get("eventStartDate")
+        end_raw = o.get("event_end_date") or o.get("eventEndDate")
         deadline_raw = reg.get("end_regn_dt")
         opens_raw = reg.get("start_regn_dt")
 
@@ -163,6 +219,7 @@ class unstop:
 
     @classmethod
     def fetch(cls):
+        detail_windows = {}
         for kind in cls.TYPES:
             for page in range(1, cls.PAGES + 1):
                 try:
@@ -172,7 +229,26 @@ class unstop:
                     if not items:
                         break
                     for o in items:
-                        yield cls.parse(o, kind)
+                        row = cls.parse(o, kind)
+                        opportunity_id = str(o.get("id") or "")
+                        if (row.get("starts_at") is None and cls.needs_event_detail(row)
+                                and opportunity_id and opportunity_id not in detail_windows):
+                            try:
+                                detail = http(
+                                    f"https://unstop.com/api/public/competition/{opportunity_id}",
+                                    cls.ALLOWED_HOSTS,
+                                ).json().get("data", {}).get("competition", {})
+                                # Do not attach another listing's dates if the API response is inconsistent.
+                                if str(detail.get("id")) == opportunity_id:
+                                    detail_windows[opportunity_id] = cls.published_event_window(detail)
+                                else:
+                                    detail_windows[opportunity_id] = (None, None)
+                            except Exception as err:
+                                print(f"  unstop detail {opportunity_id} notice: {err}")
+                                detail_windows[opportunity_id] = (None, None)
+                        if opportunity_id in detail_windows and row.get("starts_at") is None:
+                            row["starts_at"], row["ends_at"] = detail_windows[opportunity_id]
+                        yield row
                 except Exception as err:
                     print(f"  unstop {kind} page {page} notice: {err}")
                     break
