@@ -1,8 +1,12 @@
 name: worker
 on:
   schedule:
-    - cron: "17 */2 * * *"   # every 2 hours at :17 (GitHub may start scheduled runs late; nothing here is real-time)
+    - cron: "*/10 * * * *"  # event discovery every 10 minutes
+    - cron: "17 */2 * * *"  # matching and email digests every 2 hours
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: worker              # never two runs at once (the DB job locks are the second line of defence)
@@ -11,7 +15,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 9
     defaults:
       run:
         working-directory: worker
@@ -24,21 +28,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check configuration
-        if: env.SUPABASE_URL == ''
-        run: echo "::notice title=Worker Paused::SUPABASE_URL and SUPABASE_SECRET_KEY repository secrets are not set. Add them to enable background runs."
+        if: env.SUPABASE_URL == '' || env.SUPABASE_SECRET_KEY == ''
+        run: echo "::notice title=Worker Paused::Set both SUPABASE_URL and SUPABASE_SECRET_KEY repository secrets to enable background runs."
       - uses: actions/setup-python@v5
-        if: env.SUPABASE_URL != ''
+        if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != ''
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: worker/requirements.txt
-      - run: pip install -r requirements.txt
-        if: env.SUPABASE_URL != ''
+      - run: pip install -r requirements.txt pip-audit==2.10.1
+        if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != ''
+      - run: pytest -q
+        if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != ''
+      - run: python -m pip_audit -r requirements.txt
+        if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != ''
       - run: python discovery.py
-        if: env.SUPABASE_URL != ''
+        if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != '' && (github.event_name != 'schedule' || github.event.schedule == '*/10 * * * *')
       - run: python match_users.py
-        if: env.SUPABASE_URL != '' && !cancelled()   # match whatever was imported, even if one source failed
+        if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != '' && !cancelled() && (github.event_name != 'schedule' || github.event.schedule == '17 */2 * * *')
       - run: python notify.py
-        if: env.SUPABASE_URL != '' && !cancelled()
+        if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != '' && !cancelled() && (github.event_name != 'schedule' || github.event.schedule == '17 */2 * * *')
       - run: python cleanup.py
-        if: env.SUPABASE_URL != '' && !cancelled()
+        if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != '' && !cancelled()

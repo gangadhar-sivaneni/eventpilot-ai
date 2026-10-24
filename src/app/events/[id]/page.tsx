@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowUpRight, Building2, CircleAlert, Clock, FileText, Tag, 
 import { getUser } from "@/lib/auth";
 import { EVENT_COLUMNS, FORMAT_LABEL, safeOfficialUrl, safeRegistrationUrl, sourceName, type EventRow } from "@/lib/events";
 import { LocalTime } from "@/components/local-time";
-import { SignInButton } from "@/components/sign-in-button";
+import { LoginButton } from "@/components/login-button";
 import { SubmitButton } from "@/components/submit-button";
 import { FeePill, PlacePill, StatusPill } from "@/components/ui";
 import { startRegistration } from "../actions";
@@ -13,7 +13,11 @@ import { startRegistration } from "../actions";
 async function load(id: string) {
   if (!/^\d+$/.test(id)) return null;
   const { supabase, user } = await getUser();
-  const { data } = await supabase.from("events").select(EVENT_COLUMNS).eq("id", Number(id)).maybeSingle();
+  const nowIso = new Date().toISOString();
+  const freshSince = new Date(Date.parse(nowIso) - 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await supabase.from("events").select(EVENT_COLUMNS)
+    .not("quality_verified_at", "is", null).gte("last_checked_at", freshSince)
+    .or(`starts_at.gte.${nowIso},ends_at.gte.${nowIso}`).eq("id", Number(id)).maybeSingle();
   return data ? { e: data as EventRow, user, now: Date.now() } : null; // request time, read alongside the data
 }
 
@@ -127,7 +131,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                   <SubmitButton className="btn btn-primary w-full" pendingText="Starting…">Prepare my registration</SubmitButton>
                 </form>
               ) : (
-                <div className="[&>button]:w-full"><SignInButton next={`/events/${e.id}`} label="Sign in to prepare" /></div>
+                <div className="[&>button]:w-full"><LoginButton next={`/events/${e.id}`} label="Log in to prepare" /></div>
               )}
               {officialUrl && (
                 <a href={officialUrl} target="_blank" rel="noopener noreferrer" className="btn btn-ghost w-full">

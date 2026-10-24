@@ -1,13 +1,15 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import { Bricolage_Grotesque, Martian_Mono, Schibsted_Grotesk } from "next/font/google";
 import Link from "next/link";
 import { LogOut, ShieldCheck, UserRound } from "lucide-react";
 import "./globals.css";
 import { getUser } from "@/lib/auth";
+import { DEMO } from "@/lib/demo-flag";
 import { signOut } from "@/app/actions";
 import { Logo } from "@/components/logo";
 import { NavLinks, type NavItem } from "@/components/nav-links";
-import { SignInButton } from "@/components/sign-in-button";
+import { LoginButton } from "@/components/login-button";
 import { Menu } from "@/components/menu";
 import { TabBar } from "@/components/tab-bar";
 
@@ -17,20 +19,24 @@ const mono = Martian_Mono({ subsets: ["latin"], variable: "--font-martian", disp
 
 export const metadata: Metadata = {
   title: { default: "EventPilot: find events first, fill forms right", template: "%s · EventPilot" },
-  description: "An agent that finds hackathons, competitions and workshops worldwide, alerts you, and prepares registration forms you approve.",
+  description: "Verified technology events focused on Hyderabad and India, with online events included.",
 };
 export const viewport: Viewport = { themeColor: "#faf6f0", colorScheme: "light" };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const { supabase, user } = await getUser();
+  const cookieStore = await cookies();
+  const needsPassword = Boolean(user && cookieStore.get("needs_password")?.value === "1");
+
+
   let unread = 0;
-  if (user) {
+  if (user && !needsPassword) {
     const { count } = await supabase.from("event_alerts").select("id", { count: "exact", head: true }).is("read_at", null);
     unread = count ?? 0;
   }
   const items: NavItem[] = [
     { href: "/events", label: "Events" },
-    ...(user
+    ...(user && !needsPassword
       ? [
           { href: "/alerts", label: "Alerts", badge: unread },
           { href: "/registrations", label: "Registrations" },
@@ -43,51 +49,66 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 
   return (
     <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
-      <body className={`flex min-h-dvh flex-col ${user ? "pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0" : ""}`}>
+      <body className={`flex min-h-dvh flex-col ${user && !needsPassword ? "pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0" : ""}`}>
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-signal focus:px-4 focus:py-2 focus:text-signal-ink">
           Skip to content
         </a>
         <header className="sticky top-0 z-40 border-b border-line bg-ink/85 backdrop-blur-xl">
           <nav className="shell flex h-16 items-center gap-3 md:gap-6" aria-label="Main">
             <Logo />
-            <div className="hidden md:block">
-              <NavLinks items={items} />
-            </div>
+            {!needsPassword && (
+              <div className="hidden md:block">
+                <NavLinks items={items} />
+              </div>
+            )}
             <div className="ml-auto flex items-center gap-2">
               {!user && <Link href="/events" className="btn btn-quiet btn-sm md:hidden">Events</Link>}
               {user ? (
-                <Menu
-                  label="Account menu"
-                  summary={
-                    <span className="flex h-10 items-center gap-2 rounded-full border border-line bg-surface p-1 text-sm text-dim transition-colors hover:border-text hover:text-text md:pr-3">
-                      <span className="grid h-8 w-8 place-items-center rounded-full bg-text font-display text-sm font-bold text-ink">
-                        {name.slice(0, 1).toUpperCase()}
-                      </span>
-                      <span className="hidden max-w-36 truncate md:block">{name}</span>
-                    </span>
-                  }
-                >
-                  <p className="truncate px-3 pb-2 pt-1 text-xs text-faint">{user.email}</p>
-                  <Link href="/profile" className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-dim hover:bg-raised hover:text-text">
-                    <UserRound className="h-4 w-4" aria-hidden="true" /> Profile &amp; settings
-                  </Link>
-                  {isAdmin && (
-                    <Link href="/admin" className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-dim hover:bg-raised hover:text-text">
-                      <ShieldCheck className="h-4 w-4" aria-hidden="true" /> Admin
-                    </Link>
-                  )}
-                  <form action={signOut} className="border-t border-line pt-1">
-                    <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm text-dim hover:bg-raised hover:text-text">
+                needsPassword ? (
+                  <form action={signOut}>
+                    <button className="btn btn-ghost btn-sm text-faint hover:text-bad">
                       <LogOut className="h-4 w-4" aria-hidden="true" /> Sign out
                     </button>
                   </form>
-                </Menu>
+                ) : (
+                  <Menu
+                    label="Account menu"
+                    summary={
+                      <span className="flex h-10 items-center gap-2 rounded-full border border-line bg-surface p-1 text-sm text-dim transition-colors hover:border-text hover:text-text md:pr-3">
+                        <span className="grid h-8 w-8 place-items-center rounded-full bg-text font-display text-sm font-bold text-ink">
+                          {name.slice(0, 1).toUpperCase()}
+                        </span>
+                        <span className="hidden max-w-36 truncate md:block">{name}</span>
+                      </span>
+                    }
+                  >
+                    <p className="truncate px-3 pb-2 pt-1 text-xs text-faint">{user.email}</p>
+                    <Link href="/profile" className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-dim hover:bg-raised hover:text-text">
+                      <UserRound className="h-4 w-4" aria-hidden="true" /> Profile &amp; settings
+                    </Link>
+                    {isAdmin && (
+                      <Link href="/admin" className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm text-dim hover:bg-raised hover:text-text">
+                        <ShieldCheck className="h-4 w-4" aria-hidden="true" /> Admin
+                      </Link>
+                    )}
+                    <form action={signOut} className="border-t border-line pt-1">
+                      <button className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm text-dim hover:bg-raised hover:text-text">
+                        <LogOut className="h-4 w-4" aria-hidden="true" /> Sign out
+                      </button>
+                    </form>
+                  </Menu>
+                )
               ) : (
-                <SignInButton compact />
+                <LoginButton compact />
               )}
             </div>
           </nav>
         </header>
+
+        {DEMO && <div role="status" className="border-b border-warn/30 bg-warn/10 px-4 py-2 text-center text-sm text-warn">
+          Demo catalogue: these sample events are not live listings.
+        </div>}
+
 
         <main id="main" className="flex-1">{children}</main>
 
@@ -114,7 +135,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               <ul className="space-y-2 text-sm text-dim">
                 <li>Devpost · Unstop · Devfolio</li>
                 <li>HackerEarth · Major League Hacking</li>
-                <li>College website feeds</li>
+                <li>IIT Hyderabad · college website feeds</li>
               </ul>
             </div>
           </div>
@@ -123,7 +144,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
             <p className="font-mono">Built on free tiers · ₹0</p>
           </div>
         </footer>
-        {user && <TabBar unread={unread} />}
+        {user && !needsPassword && <TabBar unread={unread} />}
       </body>
     </html>
   );

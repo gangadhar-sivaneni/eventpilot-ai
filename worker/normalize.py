@@ -163,10 +163,14 @@ def normalize(raw: dict, now: datetime | None = None) -> tuple[dict | None, str 
     if starts and ends and ends < starts:
         ends = None  # contradictory source data: keep the start, drop the impossible end
 
-    # If registration deadline is missing but starts_at is provided,
-    # default registration_deadline to starts_at (end of that day) so future events are discoverable in search
-    if not deadline and starts:
-        deadline = to_utc(raw.get("starts_at"), end_of_day=True) or starts
+    if not starts:
+        return None, "missing event start date"
+
+    # Registration deadlines are not event dates. Only the event's actual end
+    # (or start when no end is supplied) determines whether it has concluded.
+    conclusion = ends or starts
+    if datetime.fromisoformat(conclusion) <= now:
+        return None, "event has already ended"
 
     fee_status, fee_amount, fee_currency = fee(raw.get("fee_status"), raw.get("fee_amount"), raw.get("fee_currency"))
 

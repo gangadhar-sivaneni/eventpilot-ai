@@ -17,7 +17,7 @@ type Filters = Partial<Record<Key | "page", string>>;
 
 const QUICK: [string, Partial<Record<Key, string>>][] = [
   ["📍 Hyderabad", { city: "Hyderabad" }],
-  ["🎓 College Fests", { category: "college" }],
+  ["🎓 College Tech", { category: "college" }],
   ["🏢 Big Tech & Companies", { category: "corporate" }],
   ["Open now", { status: "open" }],
   ["Prize money", { prize: "1" }],
@@ -38,10 +38,16 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   const { supabase, user } = await getUser();
 
   const nowIso = new Date().toISOString();
-  let query = supabase
+  const freshSince = new Date(Date.parse(nowIso) - 24 * 60 * 60 * 1000).toISOString();
+  // Supabase's filter builder types recurse through each chained filter; the
+  // filters below are selected dynamically from URL params, so keep this builder loose.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query: any = supabase
     .from("events")
     .select(EVENT_COLUMNS, { count: "exact" })
-    .gte("registration_deadline", nowIso) // strictly unexpired future deadlines only
+    .not("quality_verified_at", "is", null)
+    .gte("last_checked_at", freshSince)
+    .or(`starts_at.gte.${nowIso},ends_at.gte.${nowIso}`)
     .neq("registration_status", "closed")
     .order("first_seen_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
@@ -55,7 +61,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   if (f.category) query = query.contains("categories", [f.category.toLowerCase()]);
   if (f.fee) query = query.eq("fee_status", f.fee);
   if (f.status) query = query.eq("registration_status", f.status);
-  if (f.prize) query = query.not("prize_text", "is", null);
+  if (f.prize) query = query.not("prize_text" as never, "is", null as never);
   if (f.from) query = query.gte("starts_at", f.from);
   if (f.to) query = query.lte("starts_at", `${f.to}T23:59:59Z`);
 
@@ -87,7 +93,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
           ) : null
         }
       >
-        {error ? "The catalogue is not reachable right now." : `${total.toLocaleString()} event${total === 1 ? "" : "s"} still open for registration, newest first.`}
+        {error ? "The catalogue is not reachable right now." : `${total.toLocaleString()} upcoming tech event${total === 1 ? "" : "s"} checked in the last 24 hours.`}
       </PageHeader>
 
       <nav aria-label="Quick filters" className="no-scrollbar -mx-5 mt-6 flex gap-2 overflow-x-auto px-5 pb-1 md:mx-0 md:flex-wrap md:px-0">

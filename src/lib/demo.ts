@@ -11,9 +11,10 @@ export { DEMO };
 export const DEMO_USER = {
   id: "00000000-0000-4000-8000-000000000001",
   email: "jaswanthi@eventpilot.ai",
-  user_metadata: { full_name: "Jaswanthi Vykuntam" },
+  user_metadata: { full_name: "Jaswanthi Vykuntam", has_password: true },
   app_metadata: { role: "admin" },
 };
+
 
 type Row = Record<string, unknown>;
 type Store = Record<string, Row[]>;
@@ -342,7 +343,6 @@ function seed(): Store {
     audit_logs: [],
   };
 }
-
 function loadStore(): Store {
   try {
     if (fs.existsSync(STORE_PATH)) {
@@ -558,15 +558,25 @@ export function demoClient(signedIn: boolean) {
             user: {
               ...DEMO_USER,
               email,
-              user_metadata: { full_name: name },
+              user_metadata: { ...DEMO_USER.user_metadata, full_name: name },
             },
           },
           error: null,
         };
       },
-      getClaims: async () => ({ data: signedIn ? { claims: { sub: DEMO_USER.id } } : null, error: null }),
+      getClaims: async () => ({
+        data: signedIn ? { claims: { sub: DEMO_USER.id, user_metadata: DEMO_USER.user_metadata } } : null,
+        error: null,
+      }),
       signOut: async () => ({ error: null }),
       exchangeCodeForSession: async () => ({ data: {}, error: null }),
+      signInWithPassword: async () => ({ data: { user: DEMO_USER, session: {} }, error: null }),
+      signInWithOtp: async () => ({ data: { user: null, session: null }, error: null }),
+      verifyOtp: async () => ({ data: { user: DEMO_USER, session: {} }, error: null }),
+      updateUser: async () => ({ data: { user: DEMO_USER }, error: null }),
+      signInWithOAuth: async () => ({ data: { url: "/auth/callback?demo_google=1" }, error: null }),
     },
   };
 }
+
+

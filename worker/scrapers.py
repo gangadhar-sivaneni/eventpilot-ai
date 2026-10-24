@@ -8,10 +8,9 @@ It combines all external event platforms and feeds into one cohesive, readable m
   4. hackerearth    — Corporate innovation and coding challenges from HackerEarth
   5. mlh            — Major League Hacking student hackathon season
   6. college_rss    — College feeds (MLRIT, CBIT, IIIT, etc.) via RSS
-  7. tech_community — In-person community developer summits & corporate campus meetups (Microsoft, Google, T-Hub, AWS)
-  8. synthetic      — Isolated test/mock events for local testing
+  7. synthetic      — Isolated test/mock events for local testing (excluded from production)
 
-All scrapers expose:
+Production adapters expose:
   - KEY: str (matches the database event_sources key)
   - ALLOWED_HOSTS: set[str] (enforced by net.py SSRF firewall)
   - fetch(): generator yielding normalized event dicts
@@ -19,9 +18,10 @@ All scrapers expose:
 import json
 import re
 from datetime import datetime, timezone
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import feedparser
+from bs4 import BeautifulSoup
 from net import fetch as http
 
 
@@ -35,47 +35,33 @@ class devpost:
     PAGES = 5  # newest first; 9 per page
 
     @staticmethod
-    def period(text: str) -> tuple[str | None, str | None]:
-        """Convert 'Aug 31 - Oct 23, 2026' or 'Oct 1 - 3, 2026' into (ISO start, ISO end)."""
-        try:
-            start, _, end = (s.strip() for s in text.partition(" - "))
-            end = end or start
-            if end[:1].isdigit():  # 'Oct 1 - 3, 2026'
-                end = f"{start.split()[0]} {end}"
-            end_dt = datetime.strptime(end, "%b %d, %Y")
-            if re.search(r"\d{4}$", start):
-                start_dt = datetime.strptime(start, "%b %d, %Y")
-            else:
-                start_dt = datetime.strptime(f"{start}, {end_dt.year}", "%b %d, %Y")
-                if start_dt > end_dt:  # 'Dec 30 - Jan 2, 2027' style spans new year
-                    start_dt = start_dt.replace(year=end_dt.year - 1)
-            return start_dt.date().isoformat(), end_dt.date().isoformat()
-        except ValueError:
-            return None, None
-
-    @staticmethod
     def parse(h: dict) -> dict | None:
         if h.get("invite_only"):
             return None
         loc = (h.get("displayed_location") or {}).get("location") or ""
-        starts, ends = devpost.period(h.get("submission_period_dates") or "")
+        # Devpost's submission window is not the event schedule. Only use
+        # separately published event dates; otherwise normalize() rejects it.
+        starts = h.get("event_start_date") or h.get("starts_at")
+        ends = h.get("event_end_date") or h.get("ends_at")
         prize = re.sub(r"<[^>]+>", "", h.get("prize_amount") or "").strip()
         has_cash = (h.get("prizes_counts") or {}).get("cash") and prize.strip("$€£₹0,. ")
-        today_iso = datetime.now(timezone.utc).date().isoformat()
-        if ends and ends < today_iso:
+        event_end = ends or starts
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if event_end and event_end < now_iso:
             return None
 
+        is_online = not loc or "online" in loc.lower() or "virtual" in loc.lower()
         return {
             "external_id": h["id"],
             "url": h["url"],
             "title": h["title"],
             "organizer": h.get("organization_name"),
-            "format": "online" if loc.lower() == "online" else ("in_person" if loc else None),
-            "city": None if loc.lower() == "online" else loc,
+            "format": "online" if is_online else "in_person",
+            "city": None if is_online else loc or None,
             "starts_at": starts,
             "ends_at": ends,
-            "registration_deadline": ends,
-            "registration_status": "open" if (ends and ends >= today_iso) else "closed",
+            "registration_deadline": h.get("registration_deadline"),
+            "registration_status": "open" if h.get("open_state") == "open" else "unknown",
             "prize_text": prize if has_cash else None,
             "categories": ["hackathon"] + [t["name"] for t in h.get("themes") or []],
         }
@@ -83,11 +69,16 @@ class devpost:
     @classmethod
     def fetch(cls):
         for page in range(1, cls.PAGES + 1):
-            url = f"https://devpost.com/api/hackathons?status[]=upcoming&status[]=open&order_by=recently-added&page={page}"
-            items = http(url, cls.ALLOWED_HOSTS).json()["hackathons"]
-            if not items:
-                return
-            yield from filter(None, map(cls.parse, items))
+            try:
+                url = f"https://devpost.com/api/hackathons?status[]=upcoming&status[]=open&order_by=recently-added&page={page}"
+                res = http(url, cls.ALLOWED_HOSTS).json()
+                items = res.get("hackathons") or []
+                if not items:
+                    break
+                yield from filter(None, map(cls.parse, items))
+            except Exception as err:
+                print(f"  devpost page {page} notice: {err}")
+                break
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -103,6 +94,21 @@ class unstop:
     SYMBOL = {"INR": "₹", "USD": "$", "EUR": "€"}
     COLLEGE = re.compile(r"institute|college|university|\biit|\biim|\bnit\b|iiit|vidyalaya|engineering|school of", re.I)
 
+    @staticmethod
+    def india_time(value, country: str | None, *, end_of_day: bool = False):
+        """Unstop's India listings often omit their timezone; interpret those as IST."""
+        if not value or (country or "").strip().lower() not in {"india", "in"}:
+            return value
+        text = str(value).strip()
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            time = "23:59:59" if end_of_day else "00:00:00"
+            return f"{text}T{time}+05:30"
+        if re.search(r"(?:Z|[+-]\d{2}:?\d{2})$", text, re.I):
+            return text
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?", text):
+            return text.replace(" ", "T") + "+05:30"
+        return value
+
     @classmethod
     def prize(cls, prizes: list) -> str | None:
         cash = sum(p.get("cash") or 0 for p in prizes)
@@ -117,6 +123,8 @@ class unstop:
         org = (o.get("organisation") or {}).get("name")
         addr = o.get("address_with_country_logo") or {}
         region = o.get("region")
+        country = ((addr.get("country") or {}).get("name") if isinstance(addr.get("country"), dict)
+                   else addr.get("country"))
 
         raw_url = o.get("seo_url") or ""
         if raw_url.startswith("/"):
@@ -124,18 +132,30 @@ class unstop:
         if not re.search(r"-\d{5,9}(?:/.*)?$|/(?:o|p)/\d+", raw_url) and o.get("id"):
             raw_url = f"https://unstop.com/o/{o['id']}"
 
+        # Event dates and registration dates describe different timelines.
+        # Missing event dates stay missing and are rejected by normalize().
+        start_raw = o.get("start_date") or o.get("startDate")
+        end_raw = o.get("end_date") or o.get("endDate")
+        deadline_raw = reg.get("end_regn_dt")
+        opens_raw = reg.get("start_regn_dt")
+
+        is_online = region == "online" or not addr.get("city")
         return {
             "external_id": o["id"],
             "url": raw_url,
             "title": o["title"],
             "organizer": org,
-            "format": {"online": "online", "offline": "in_person", "hybrid": "hybrid"}.get(region),
+            "format": {"online": "online", "offline": "in_person", "hybrid": "hybrid"}.get(region) or ("online" if is_online else "in_person"),
             "city": addr.get("city") or None,
-            "country": (addr.get("country") or {}).get("name") if isinstance(addr.get("country"), dict) else addr.get("country"),
-            "registration_opens_at": reg.get("start_regn_dt"),
-            "registration_deadline": reg.get("end_regn_dt") or o.get("end_date"),
-            "registration_status": "open" if o.get("regn_open") == 1 else None,
-            "fee_status": "paid" if o.get("isPaid") else "free",
+            "country": country or ("India" if addr.get("city") else None),
+            "registration_opens_at": cls.india_time(opens_raw, country),
+            "starts_at": cls.india_time(start_raw, country),
+            "ends_at": cls.india_time(end_raw, country, end_of_day=True),
+            "registration_deadline": cls.india_time(deadline_raw, country, end_of_day=True),
+            "registration_status": "open" if o.get("regn_open") == 1 or reg.get("reg_status") == "STARTED" else None,
+            "fee_status": "paid" if o.get("isPaid") in (True, 1) else (
+                "free" if o.get("isPaid") in (False, 0) else "unknown"
+            ),
             "prize_text": cls.prize(o.get("prizes") or []),
             "categories": [kind.rstrip("s"), o.get("subtype"), *(w["name"] for w in o.get("workfunction") or []),
                            "college" if org and cls.COLLEGE.search(org) else None],
@@ -145,12 +165,17 @@ class unstop:
     def fetch(cls):
         for kind in cls.TYPES:
             for page in range(1, cls.PAGES + 1):
-                url = f"https://unstop.com/api/public/opportunity/search-result?opportunity={kind}&page={page}&per_page=50&oppstatus=open"
-                items = http(url, cls.ALLOWED_HOSTS).json()["data"]["data"]
-                if not items:
+                try:
+                    url = f"https://unstop.com/api/public/opportunity/search-result?opportunity={kind}&page={page}&per_page=50&oppstatus=open"
+                    res = http(url, cls.ALLOWED_HOSTS).json()
+                    items = (res.get("data") or {}).get("data") or []
+                    if not items:
+                        break
+                    for o in items:
+                        yield cls.parse(o, kind)
+                except Exception as err:
+                    print(f"  unstop {kind} page {page} notice: {err}")
                     break
-                for o in items:
-                    yield cls.parse(o, kind)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -172,7 +197,7 @@ class devfolio:
             "registration_url": f"https://{h['slug']}.devfolio.co/",
             "title": h["name"],
             "description": h.get("tagline"),
-            "format": "online" if h.get("is_online") else "in_person",
+            "format": "online" if h.get("is_online") is True else ("in_person" if h.get("is_online") is False else None),
             "city": h.get("city"),
             "country": h.get("country"),
             "starts_at": h.get("starts_at"),
@@ -253,8 +278,8 @@ class mlh:
             "country": venue.get("country"),
             "starts_at": starts,
             "ends_at": ends,
-            "registration_deadline": starts,
-            "registration_status": "open",
+            "registration_deadline": None,
+            "registration_status": "unknown",
             "categories": ["hackathon", "student", "mlh"],
         }
 
@@ -276,7 +301,7 @@ class mlh:
 # 6. COLLEGE RSS FEEDS SCRAPER
 # ─────────────────────────────────────────────────────────────────────────────
 class college_rss:
-    """College website RSS feeds (MLRIT, CBIT, etc.)."""
+    """College RSS discovery; import only pages that publish Schema.org Event dates."""
     KEY = "college_rss"
     FEEDS = [
         ("https://mlrit.ac.in/feed/", "MLR Institute of Technology", "Hyderabad", "India"),
@@ -305,314 +330,150 @@ class college_rss:
             "categories": ["college", m.group(0).lower()],
         }
 
+    @staticmethod
+    def _event_nodes(value):
+        if isinstance(value, list):
+            for item in value:
+                yield from college_rss._event_nodes(item)
+        elif isinstance(value, dict):
+            kind = value.get("@type", [])
+            kinds = [kind] if isinstance(kind, str) else kind
+            if any(str(k).endswith("Event") for k in kinds):
+                yield value
+            for child in value.get("@graph", []):
+                yield from college_rss._event_nodes(child)
+
+    @classmethod
+    def parse_event_page(cls, html: str, entry: dict, college: str) -> dict | None:
+        """Use the event's published structured data; never treat the article date as its event date."""
+        for script in BeautifulSoup(html, "html.parser").select('script[type="application/ld+json"]'):
+            try:
+                data = json.loads(script.string or script.get_text())
+            except (TypeError, json.JSONDecodeError):
+                continue
+            for event in cls._event_nodes(data):
+                start = event.get("startDate")
+                if not start:
+                    continue
+                location = event.get("location") or {}
+                address = location.get("address") or {} if isinstance(location, dict) else {}
+                if isinstance(address, dict):
+                    event_city = address.get("addressLocality")
+                    event_country = address.get("addressCountry")
+                    if isinstance(event_country, dict):
+                        event_country = event_country.get("name") or event_country.get("@id")
+                    if str(event_country or "").rstrip("/").endswith("/IN"):
+                        event_country = "IN"
+                else:
+                    event_city, event_country = None, None
+                mode = event.get("eventAttendanceMode") or ""
+                event_format = "online" if "OnlineEventAttendanceMode" in str(mode) else (
+                    "in_person" if location else "unknown"
+                )
+                organizer = event.get("organizer") or college
+                if isinstance(organizer, dict):
+                    organizer = organizer.get("name") or college
+                offers = event.get("offers") or {}
+                if isinstance(offers, list):
+                    offers = offers[0] if offers else {}
+                return {
+                    "external_id": event.get("@id") or entry.get("id") or entry.get("link"),
+                    "url": event.get("url") or entry.get("link"),
+                    "registration_url": offers.get("url") if isinstance(offers, dict) else None,
+                    "title": event.get("name") or entry.get("title"),
+                    "description": event.get("description") or entry.get("summary"),
+                    "organizer": organizer,
+                    "city": event_city,
+                    "country": event_country,
+                    "format": event_format,
+                    "starts_at": unstop.india_time(start, event_country),
+                    "ends_at": unstop.india_time(event.get("endDate"), event_country, end_of_day=True),
+                    "categories": ["college", "technology event"],
+                }
+        return None
+
     @classmethod
     def fetch(cls):
         for url, college, city, country in cls.FEEDS:
-            feed = feedparser.parse(http(url, cls.ALLOWED_HOSTS).content)
-            for entry in feed.entries:
-                row = cls.parse(entry, college, city, country)
-                if row:
-                    yield row
+            try:
+                feed = feedparser.parse(http(url, cls.ALLOWED_HOSTS).content)
+                for entry in feed.entries:
+                    row = cls.parse(entry, college, city, country)
+                    if not row or not entry.get("link"):
+                        continue
+                    page = http(entry.link, {urlsplit(url).hostname}).text
+                    event = cls.parse_event_page(page, entry, college)
+                    if event:
+                        yield event
+            except Exception as err:
+                print(f"  college_rss {college} notice: {err}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7. TECH COMMUNITY & CORPORATE CAMPUS SUMMITS SCRAPER
+# IIT HYDERABAD OFFICIAL EVENTS CALENDAR
 # ─────────────────────────────────────────────────────────────────────────────
-class tech_community:
-    """Flagship developer conferences and corporate campus fests (Microsoft, Google, T-Hub, AWS)."""
-    KEY = "tech_community"
-    ALLOWED_HOSTS = {
-        "globalai.community",
-        "developer.microsoft.com",
-        "t-hub.co",
-        "fossunited.org",
-        "gdg.community.dev",
-        "meetup.com",
-        "aws.amazon.com",
-        "cloudnative.community",
-    }
+class iit_hyd:
+    """Dated event cards from IIT Hyderabad's official Workshops and Events page."""
+    KEY = "iit_hyd"
+    URL = "https://iith.ac.in/events/"
+    ALLOWED_HOSTS = {"iith.ac.in"}
+    DATE_PATTERN = re.compile(r"\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}\b")
 
-    EVENTS = [
-        {
-            "external_id": "intellicon-2026-msft-hyd",
-            "url": "https://globalai.community/hub/hyderabad/events/intellicon-2026",
-            "registration_url": "https://docs.google.com/forms/d/e/1FAIpQLSc-intellicon-2026-microsoft-hyd/viewform",
-            "title": "IntelliCON 2026 – Advanced Agentic & Generative AI Conference",
-            "organizer": "Global AI Community Hyderabad & Cloud Native Community (Hosted at Microsoft)",
+    @classmethod
+    def parse(cls, article) -> dict | None:
+        link = article.select_one("h3 a[href]")
+        date_node = article.select_one("p")
+        if not link or not date_node:
+            return None
+        date_match = cls.DATE_PATTERN.search(date_node.get_text(" ", strip=True))
+        if not date_match:
+            return None
+        date_text = date_match.group(0)
+        event_date = None
+        for fmt in ("%d %b %Y", "%d %B %Y"):
+            try:
+                event_date = datetime.strptime(date_text, fmt).date().isoformat()
+                break
+            except ValueError:
+                continue
+        if not event_date:
+            return None
+
+        title_text = link.get_text(" ", strip=True)
+        title_parts = re.split(r"\s[-–—]\s", title_text, maxsplit=1)
+        title = title_parts[0].strip()
+        paragraphs = article.find_all("p")
+        description_parts = title_parts[1:] + [p.get_text(" ", strip=True) for p in paragraphs[1:]]
+        description = " ".join(p for p in description_parts if p) or None
+        url = urljoin(cls.URL, link.get("href"))
+        return {
+            "external_id": url,
+            "url": url,
+            "registration_url": url,
+            "title": title,
+            "description": description,
+            "organizer": "IIT Hyderabad",
             "city": "Hyderabad",
             "country": "India",
-            "format": "in_person",
-            "starts_at": "2026-10-24T04:00:00+00:00",
-            "ends_at": "2026-10-24T08:30:00+00:00",
-            "registration_opens_at": "2026-10-01T00:00:00+00:00",
-            "registration_deadline": "2026-10-23T18:29:59+00:00",
-            "fee_status": "free",
-            "fee_amount": 0,
-            "fee_currency": "INR",
-            "prize_text": "Certificate of Participation & Microsoft Community Swag",
-            "registration_status": "open",
-            "eligibility": "Open to all software developers, AI engineers, and students. Microsoft Campus gate requires government or college photo ID.",
-            "categories": ["ai", "conference", "agentic-ai", "microsoft", "hyderabad", "community", "meetup"],
-            "description": "IntelliCON 2026 is an in-person tech community conference hosted at Microsoft Campus (Building 1), ISB Road, Gachibowli, Hyderabad. Featuring deep-dive keynotes, technical tracks, and live architecture demos on Autonomous Agents, Azure OpenAI, LLM orchestration, and enterprise production systems."
-        },
-        {
-            "external_id": "agentic-ai-builders-msft-hyd-2026",
-            "url": "https://globalai.community/hub/hyderabad/events/agentic-ai-builders",
-            "registration_url": "https://docs.google.com/forms/d/e/1FAIpQLSc-agentic-ai-builders-msft/viewform",
-            "title": "Agentic AI & Autonomous Workflows Builders Meetup 2026",
-            "organizer": "Global AI Hyderabad & Hyderabad AI Guild (Hosted at Microsoft)",
-            "city": "Hyderabad",
-            "country": "India",
-            "format": "in_person",
-            "starts_at": "2026-11-14T04:00:00+00:00",
-            "ends_at": "2026-11-14T08:30:00+00:00",
-            "registration_opens_at": "2026-10-15T00:00:00+00:00",
-            "registration_deadline": "2026-11-13T18:29:59+00:00",
-            "fee_status": "free",
-            "fee_amount": 0,
-            "fee_currency": "INR",
-            "prize_text": "AI Demo Winners: Cloud credits & Azure AI swags",
-            "registration_status": "open",
-            "eligibility": "Open to software engineers, AI researchers, and students building agentic tools and Multi-Agent Systems.",
-            "categories": ["ai", "agentic-ai", "microsoft", "hyderabad", "meetup", "community"],
-            "description": "A hands-on developer meetup at Microsoft Building 1, Gachibowli, Hyderabad, centered on building Multi-Agent Systems (MAS), Autogen, CrewAI, and LangGraph pipelines with Azure AI models."
-        },
-        {
-            "external_id": "msft-reactor-genai-masterclass-2026",
-            "url": "https://developer.microsoft.com/reactor/events/hyd-genai-masterclass-2026",
-            "registration_url": "https://docs.google.com/forms/d/e/1FAIpQLSc-msft-reactor-genai-hyd/viewform",
-            "title": "Microsoft Reactor Generative AI Masterclass: Production RAG & Fine-Tuning",
-            "organizer": "Microsoft Reactor India",
-            "city": "Hyderabad",
-            "country": "India",
-            "format": "in_person",
-            "starts_at": "2026-11-06T04:30:00+00:00",
-            "ends_at": "2026-11-06T09:30:00+00:00",
-            "registration_opens_at": "2026-10-10T00:00:00+00:00",
-            "registration_deadline": "2026-11-04T18:29:59+00:00",
-            "fee_status": "free",
-            "fee_amount": 0,
-            "fee_currency": "INR",
-            "prize_text": "Official Microsoft Reactor Certificate of Completion",
-            "registration_status": "open",
-            "eligibility": "Open to AI engineers, cloud practitioners, and graduate developers.",
-            "categories": ["ai", "workshop", "microsoft", "copilot", "hyderabad", "community"],
-            "description": "Live in-person technical masterclass at Microsoft Campus Building 1, Gachibowli, Hyderabad. Deep-dive into hybrid search, vector embeddings, fine-tuning SLMs, and evaluation metrics with Microsoft Senior Cloud Solution Architects."
-        },
-        {
-            "external_id": "gccd-hyderabad-2026",
-            "url": "https://gdg.community.dev/events/details/gccd-hyderabad-2026",
-            "registration_url": "https://docs.google.com/forms/d/e/1FAIpQLSc-gccd-hyderabad-2026/viewform",
-            "title": "Google Cloud Community Day Hyderabad 2026 (GCCD)",
-            "organizer": "Google Cloud Community Hyderabad & GDG Cloud",
-            "city": "Hyderabad",
-            "country": "India",
-            "format": "in_person",
-            "starts_at": "2026-11-07T03:30:00+00:00",
-            "ends_at": "2026-11-07T11:30:00+00:00",
-            "registration_opens_at": "2026-10-05T00:00:00+00:00",
-            "registration_deadline": "2026-11-05T18:29:59+00:00",
-            "fee_status": "free",
-            "fee_amount": 0,
-            "fee_currency": "INR",
-            "prize_text": "Exclusive Google Cloud Badges, T-Shirts, and GCP Cloud Credits",
-            "registration_status": "open",
-            "eligibility": "Open to all cloud developers, DevOps specialists, data engineers, and tech students.",
-            "categories": ["cloud", "ai", "google", "kubernetes", "hyderabad", "conference", "community"],
-            "description": "Annual Google Cloud Community Day hosted in Hyderabad near HITEC City. Covers Gemini multimodal APIs, Vertex AI, Google Kubernetes Engine (GKE), and secure cloud deployment architectures."
-        },
-        {
-            "external_id": "aws-community-day-hyd-2026",
-            "url": "https://aws.amazon.com/events/community-day-hyderabad-2026",
-            "registration_url": "https://docs.google.com/forms/d/e/1FAIpQLSc-aws-community-day-hyd-2026/viewform",
-            "title": "AWS Community Day Hyderabad 2026",
-            "organizer": "AWS User Group Hyderabad",
-            "city": "Hyderabad",
-            "country": "India",
-            "format": "in_person",
-            "starts_at": "2026-11-14T03:30:00+00:00",
-            "ends_at": "2026-11-14T12:00:00+00:00",
-            "registration_opens_at": "2026-10-01T00:00:00+00:00",
-            "registration_deadline": "2026-11-12T18:29:59+00:00",
-            "fee_status": "free",
-            "fee_amount": 0,
-            "fee_currency": "INR",
-            "prize_text": "AWS Swags, Certification vouchers, and AWS Cloud Credits",
-            "registration_status": "open",
-            "eligibility": "Cloud architects, DevOps practitioners, AWS developers, and student cloud builders.",
-            "categories": ["aws", "cloud", "serverless", "devops", "hyderabad", "conference"],
-            "description": "The largest community-run AWS tech conference in Telangana, bringing AWS Heroes, Community Builders, and enterprise cloud architects together for sessions on Amazon Bedrock, serverless scale, and zero-trust cloud security."
-        },
-        {
-            "external_id": "thub-buildx-nextgen-2026",
-            "url": "https://t-hub.co/events/buildx-ai-nextgen-summit-2026",
-            "registration_url": "https://docs.google.com/forms/d/e/1FAIpQLSc-thub-buildx-summit-2026/viewform",
-            "title": "T-Hub BuildX & AI NextGen Summit 2026",
-            "organizer": "T-Hub Hyderabad",
-            "city": "Hyderabad",
-            "country": "India",
-            "format": "in_person",
-            "starts_at": "2026-11-28T04:00:00+00:00",
-            "ends_at": "2026-11-28T12:30:00+00:00",
-            "registration_opens_at": "2026-10-15T00:00:00+00:00",
-            "registration_deadline": "2026-11-26T18:29:59+00:00",
-            "fee_status": "free",
-            "fee_amount": 0,
-            "fee_currency": "INR",
-            "prize_text": "₹2,50,000 Incubation Grants & T-Hub Co-Working Passes",
-            "registration_status": "open",
-            "eligibility": "Open to student entrepreneurs, startup founders, AI engineers, and tech innovators.",
-            "categories": ["startup", "ai", "t-hub", "hyderabad", "summit", "pitching", "expo"],
-            "description": "Hosted at T-Hub Phase 2 (Knowledge City, Rai Durg, Hyderabad), the world's largest innovation campus. Features product showcases, live venture capital pitching, AI startup demo stations, and founder mentorship."
-        },
-        {
-            "external_id": "cncf-kubeday-hyd-2026",
-            "url": "https://cloudnative.community/events/kubeday-hyderabad-2026",
-            "registration_url": "https://docs.google.com/forms/d/e/1FAIpQLSc-kubeday-hyderabad-2026/viewform",
-            "title": "Cloud Native & KubeDay Hyderabad 2026",
-            "organizer": "Cloud Native Computing Foundation (CNCF) Hyderabad Chapter",
-            "city": "Hyderabad",
-            "country": "India",
-            "format": "in_person",
-            "starts_at": "2026-12-05T03:30:00+00:00",
-            "ends_at": "2026-12-05T11:30:00+00:00",
-            "registration_opens_at": "2026-10-15T00:00:00+00:00",
-            "registration_deadline": "2026-12-03T18:29:59+00:00",
-            "fee_status": "free",
-            "fee_amount": 0,
-            "fee_currency": "INR",
-            "prize_text": "CNCF Community Swag & Kubernetes Certified Exam discount codes",
-            "registration_status": "open",
-            "eligibility": "Open to platform engineers, SREs, Kubernetes administrators, and cloud engineers.",
-            "categories": ["kubernetes", "cloud-native", "devops", "microsoft", "hyderabad", "conference"],
-            "description": "CNCF community conference hosted in the auditorium at Microsoft Campus, Gachibowli, Hyderabad. Covering Kubernetes v1.32 internals, eBPF observability, service mesh, and GitOps at enterprise scale."
-        },
-        {
-            "external_id": "xconf-thoughtworks-hyd-2026",
-            "url": "https://www.thoughtworks.com/xconf-india-2026-hyderabad",
-            "registration_url": "https://docs.google.com/forms/d/e/1FAIpQLSc-xconf-thoughtworks-hyd/viewform",
-            "title": "XConf India 2026 – AI-First Engineering Summit",
-            "organizer": "Thoughtworks India",
-            "city": "Hyderabad",
-            "country": "India",
-            "format": "in_person",
-            "starts_at": "2026-11-20T04:00:00+00:00",
-            "ends_at": "2026-11-20T11:30:00+00:00",
-            "registration_opens_at": "2026-10-15T00:00:00+00:00",
-            "registration_deadline": "2026-11-18T18:29:59+00:00",
-            "fee_status": "free",
-            "fee_amount": 0,
-            "fee_currency": "INR",
-            "prize_text": "Tech books, Thoughtworks swag, and exclusive conference kit",
-            "registration_status": "open",
-            "eligibility": "Software engineers, tech leads, system architects, and senior developers.",
-            "categories": ["ai", "software-engineering", "architecture", "hyderabad", "conference"],
-            "description": "Thoughtworks annual flagship technology conference in Hyderabad (Knowledge City, HITEC City). Deep technical talks on AI-augmented software development, event-driven microservices, and high-leverage engineering patterns."
-        },
-        {
-            "external_id": "pyconf-hyderabad-2026",
-            "url": "https://hydpy.org/pyconf-2026",
-            "registration_url": "https://docs.google.com/forms/d/e/1FAIpQLSc-pyconf-hyderabad-2026/viewform",
-            "title": "PyConf Hyderabad 2026 – Regional Python Conference",
-            "organizer": "Hyderabad Python User Group (HydPy)",
-            "city": "Hyderabad",
-            "country": "India",
-            "format": "in_person",
-            "starts_at": "2026-12-12T03:30:00+00:00",
-            "ends_at": "2026-12-13T12:30:00+00:00",
-            "registration_opens_at": "2026-10-10T00:00:00+00:00",
-            "registration_deadline": "2026-12-08T18:29:59+00:00",
-            "fee_status": "paid",
-            "fee_amount": 499,
-            "fee_currency": "INR",
-            "prize_text": "₹50,000 Open Source Contributor Grants & HydPy Badges",
-            "registration_status": "open",
-            "eligibility": "Open to all Python programmers, data scientists, educators, and university students.",
-            "categories": ["python", "ai", "data-science", "iiit", "hyderabad", "conference"],
-            "description": "Two-day conference at IIIT Hyderabad Campus featuring Python in production, Polars, PyTorch model deployment, and PyScript, with interactive contributor sprints."
-        },
-        {
-            "external_id": "devfest-hyderabad-2026",
-            "url": "https://gdg.community.dev/events/details/devfest-hyderabad-2026",
-            "registration_url": "https://docs.google.com/forms/d/e/1FAIpQLSc-devfest-hyderabad-2026/viewform",
-            "title": "DevFest Hyderabad 2026 – Flagship Google Developer Festival",
-            "organizer": "Google Developer Groups (GDG) Hyderabad",
-            "city": "Hyderabad",
-            "country": "India",
-            "format": "in_person",
-            "starts_at": "2026-11-21T03:30:00+00:00",
-            "ends_at": "2026-11-21T12:30:00+00:00",
-            "registration_opens_at": "2026-10-01T00:00:00+00:00",
-            "registration_deadline": "2026-11-19T18:29:59+00:00",
-            "fee_status": "free",
-            "fee_amount": 0,
-            "fee_currency": "INR",
-            "prize_text": "Official DevFest Hyderabad T-Shirts, Goodies & Google Swag",
-            "registration_status": "open",
-            "eligibility": "Open to all developers, mobile app creators, AI engineers, and tech students.",
-            "categories": ["google", "ai", "android", "web", "cloud", "hyderabad", "conference"],
-            "description": "DevFest is the annual community-run tech conference organized by GDG Hyderabad at JRC Conventions, Gachibowli Road. Featuring 4 parallel tracks on AI & Machine Learning, Web & Cloud, Android, and Career Growth."
-        },
-        {
-            "external_id": "foss-united-hyd-summit-2026",
-            "url": "https://fossunited.org/events/hyderabad-summit-2026",
-            "registration_url": "https://docs.google.com/forms/d/e/1FAIpQLSc-foss-united-hyd-2026/viewform",
-            "title": "FOSS United Hyderabad Summit 2026",
-            "organizer": "FOSS United Foundation",
-            "city": "Hyderabad",
-            "country": "India",
-            "format": "in_person",
-            "starts_at": "2026-12-19T04:00:00+00:00",
-            "ends_at": "2026-12-19T11:30:00+00:00",
-            "registration_opens_at": "2026-10-15T00:00:00+00:00",
-            "registration_deadline": "2026-12-17T18:29:59+00:00",
-            "fee_status": "free",
-            "fee_amount": 0,
-            "fee_currency": "INR",
-            "prize_text": "₹1,00,000 FOSS Project Grants for top open-source demos",
-            "registration_status": "open",
-            "eligibility": "Open to all open source developers, Linux enthusiasts, and contributors.",
-            "categories": ["open-source", "foss", "linux", "hyderabad", "conference", "community"],
-            "description": "An annual gathering of Free and Open Source Software (FOSS) builders, maintainers, and hackers in Hyderabad at T-Hub/IIIT. Celebrating community-owned software, decentralized tools, and local FOSS grants."
-        },
-        {
-            "external_id": "gcc-x-hyderabad-summit-2026",
-            "url": "https://gccxhyderabad.com/annual-summit-2026",
-            "registration_url": "https://docs.google.com/forms/d/e/1FAIpQLSc-gcc-x-hyderabad-summit-2026/viewform",
-            "title": "GCC X Hyderabad Enterprise AI & Tech Conclave 2026",
-            "organizer": "HYSEA & Telangana IT Academy",
-            "city": "Hyderabad",
-            "country": "India",
-            "format": "in_person",
-            "starts_at": "2026-12-03T03:30:00+00:00",
-            "ends_at": "2026-12-03T12:30:00+00:00",
-            "registration_opens_at": "2026-10-10T00:00:00+00:00",
-            "registration_deadline": "2026-12-01T18:29:59+00:00",
-            "fee_status": "free",
-            "fee_amount": 0,
-            "fee_currency": "INR",
-            "prize_text": "HYSEA Innovation Trophy & GCC Enterprise Recognition",
-            "registration_status": "open",
-            "eligibility": "Open to technology leaders, AI architects, enterprise software engineers, and founders.",
-            "categories": ["enterprise", "ai", "cloud", "hyderabad", "summit", "conference"],
-            "description": "Hyderabad's flagship Global Capability Center (GCC) technology summit at HICC Novotel. Spotlighting how Fortune 500 tech centers in Hyderabad are pioneering agentic AI, global cloud delivery, and enterprise automation."
+            "format": "unknown",
+            "starts_at": unstop.india_time(event_date, "India"),
+            "categories": ["college"],
         }
-    ]
 
     @classmethod
     def fetch(cls):
-        now_iso = datetime.now(timezone.utc).isoformat()
-        for ev in cls.EVENTS:
-            if ev.get("ends_at") and ev["ends_at"] < now_iso:
-                continue
-            yield ev
+        soup = BeautifulSoup(http(cls.URL, cls.ALLOWED_HOSTS).text, "html.parser")
+        for article in soup.select("article"):
+            row = cls.parse(article)
+            if row:
+                yield row
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 8. SYNTHETIC (TEST/DEMO DATA) SCRAPER
-# ─────────────────────────────────────────────────────────────────────────────
+# Test-only adapter (not registered for production discovery).
+
 class synthetic:
-    """Clearly-labelled fake events for tests and local demos. Disabled in seeded source registry."""
+    """Clearly-labelled fake events for tests only; excluded from production discovery."""
     KEY = "synthetic"
     ALLOWED_HOSTS: set[str] = set()
 
@@ -659,13 +520,12 @@ class synthetic:
 # ─────────────────────────────────────────────────────────────────────────────
 REGISTRY = {
     s.KEY: s for s in (
-        synthetic,
         devpost,
         unstop,
         devfolio,
         hackerearth,
         mlh,
         college_rss,
-        tech_community,
+        iit_hyd,
     )
 }
