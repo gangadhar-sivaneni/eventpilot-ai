@@ -89,7 +89,7 @@ class unstop:
     KEY = "unstop"
     ALLOWED_HOSTS = {"unstop.com"}
     TYPES = ["hackathons", "competitions", "workshops", "conferences"]
-    PAGES = 3  # per type, 50 per page
+    PAGES = 5  # per type, 50 per page; date enrichment remains under the worker time limit
     CURRENCY = {"fa-rupee": "INR", "fa-dollar": "USD", "fa-euro": "EUR"}
     SYMBOL = {"INR": "₹", "USD": "$", "EUR": "€"}
     COLLEGE = re.compile(r"institute|college|university|\biit|\biim|\bnit\b|iiit|vidyalaya|engineering|school of", re.I)
