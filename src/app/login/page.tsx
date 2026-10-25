@@ -4,6 +4,7 @@ import { ShieldCheck, Lock, CircleCheck } from "lucide-react";
 import { getUser } from "@/lib/auth";
 import { AuthView } from "@/components/auth-view";
 import { Logo } from "@/components/logo";
+import { sanitizeRedirectPath } from "@/lib/security";
 
 export const metadata: Metadata = {
   title: "Log in or Create Account",
@@ -17,8 +18,7 @@ export default async function LoginPage({
 }) {
   const { user } = await getUser();
   const params = await searchParams;
-  const next = params.next ?? "/events";
-  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/events";
+  const safeNext = sanitizeRedirectPath(params.next, "/events");
 
   if (user) {
     if (!user.user_metadata?.has_password) {
