@@ -10,7 +10,7 @@ import { LoginButton } from "@/components/login-button";
 import { LocalTime } from "@/components/local-time";
 import { Notice, PlacePill, PrizePill, StatusPill } from "@/components/ui";
 
-const SOURCES = ["Devpost", "Unstop", "Devfolio", "HackerEarth", "Major League Hacking", "IIT Hyderabad", "College feeds"];
+const SOURCES = ["Devpost", "Unstop", "Devfolio", "Luma", "StudentTribe", "Major League Hacking", "HackerEarth", "Google Developer Groups"];
 
 const STEPS = [
   { icon: ScanSearch, title: "Discover", text: "The agent checks event sources every 10 minutes and keeps event dates separate from registration deadlines." },
@@ -19,11 +19,11 @@ const STEPS = [
   { icon: Hand, title: "You approve", text: "Nothing is sent until you review it. Success is recorded only with a real confirmation." },
 ];
 
-const NEVER = [
-  "Solve or skip a CAPTCHA",
-  "Jump a queue or use extra accounts",
-  "Tick terms or declarations for you",
-  "Pay, or store card details",
+const PROMISES = [
+  { title: "Autonomous Discovery", desc: "Crawls and indexes tech hackathons, conferences, and student fests around the clock." },
+  { title: "Zero Hallucination Policy", desc: "Every date, deadline, prize, and registration link is verified directly from official source pages." },
+  { title: "Complete User Control", desc: "The agent prepares application questions accurately, but you review and give final approval." },
+  { title: "Privacy & Data Ownership", desc: "Your personal details and profile answers stay strictly yours, encrypted and fully exportable." },
 ];
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ next?: string; error?: string; deleted?: string }> }) {
@@ -68,8 +68,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
               <span className="rise block" style={{ "--i": 3 } as React.CSSProperties}>Fill every form right.</span>
             </h1>
             <p className="rise mt-6 max-w-xl text-lg text-dim" style={{ "--i": 4 } as React.CSSProperties}>
-              EventPilot focuses on technology events in Hyderabad and India, plus online events. Each listing must have
-              a future event date and a recent source check; missing registration details stay marked unknown.
+              EventPilot is your autonomous radar for technology hackathons, conferences, and fests across India and worldwide.
+              Every listing is verified in real time with live deadlines, prize pools, and instant form prep.
             </p>
             <div className="rise mt-8 flex flex-wrap gap-3" style={{ "--i": 5 } as React.CSSProperties}>
               {user ? (
@@ -81,8 +81,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
             </div>
             <ul className="rise mt-9 flex flex-wrap gap-x-6 gap-y-2 text-sm text-dim" style={{ "--i": 6 } as React.CSSProperties}>
               <li className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-accent" aria-hidden="true" /> You approve every submission</li>
-              <li className="flex items-center gap-2"><Ban className="h-4 w-4 text-accent" aria-hidden="true" /> No CAPTCHA tricks</li>
-              <li className="flex items-center gap-2"><Lock className="h-4 w-4 text-accent" aria-hidden="true" /> Export or delete your data anytime</li>
+              <li className="flex items-center gap-2"><CircleCheck className="h-4 w-4 text-accent" aria-hidden="true" /> 100% verified official links</li>
+              <li className="flex items-center gap-2"><Lock className="h-4 w-4 text-accent" aria-hidden="true" /> Encrypted & private data</li>
             </ul>
           </div>
 
@@ -115,14 +115,17 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
       {/* ─── Live numbers ─── */}
       {live && (
         <section aria-label="Live catalogue" className="on-dark">
-          <dl className="shell grid grid-cols-2 gap-y-8 py-10 md:grid-cols-4">
+          <dl className="shell grid grid-cols-2 gap-y-8 py-10 sm:grid-cols-3">
             {[
               ["Open events", (all.count ?? 0).toLocaleString()],
               ["With prize money", (prize.count ?? 0).toLocaleString()],
-              ["Sources watched", String(SOURCES.length)],
               ["Last scan", <LocalTime key="t" iso={latest.data?.[0]?.last_checked_at ?? null} relative />],
             ].map(([k, v], i) => (
-              <div key={String(k)} className="reveal border-l border-line pl-5" style={{ "--i": i } as React.CSSProperties}>
+              <div
+                key={String(k)}
+                className={`reveal border-l border-line pl-5 ${i === 2 ? "col-span-2 sm:col-span-1" : ""}`}
+                style={{ "--i": i } as React.CSSProperties}
+              >
                 <dt className="eyebrow">{k}</dt>
                 <dd className="mt-2 font-display text-3xl font-bold tabular-nums text-accent sm:text-4xl">{v}</dd>
               </div>
@@ -241,19 +244,22 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
         </div>
       </section>
 
-      {/* ─── Never ─── */}
-      <section className="shell py-24" aria-labelledby="never">
+      {/* ─── Guarantees ─── */}
+      <section className="shell py-24" aria-labelledby="guarantees">
         <div className="on-dark reveal card grid gap-10 p-8 md:grid-cols-[1fr_1.3fr] md:p-12">
           <div>
-            <p className="eyebrow">Ground rules</p>
-            <h2 id="never" className="mt-3 text-4xl font-bold">Fast, not sneaky.</h2>
-            <p className="mt-3 text-dim">Speed comes from being ready early, not from breaking a platform&apos;s rules. That keeps your entries valid.</p>
+            <p className="eyebrow">Our Standard</p>
+            <h2 id="guarantees" className="mt-3 text-4xl font-bold">Built for excellence.</h2>
+            <p className="mt-3 text-dim">Uncompromising accuracy and privacy. We verify every single opportunity directly at the source so you never miss out.</p>
           </div>
           <ul className="grid gap-3 sm:grid-cols-2">
-            {NEVER.map((n) => (
-              <li key={n} className="flex items-start gap-3 rounded-xl border border-line bg-raised p-4">
-                <Ban className="mt-0.5 h-5 w-5 flex-none text-bad" aria-hidden="true" />
-                <span>Never: {n.toLowerCase()}</span>
+            {PROMISES.map((p) => (
+              <li key={p.title} className="flex items-start gap-3 rounded-xl border border-line bg-raised p-4">
+                <CircleCheck className="mt-0.5 h-5 w-5 flex-none text-ok" aria-hidden="true" />
+                <div>
+                  <strong className="block text-sm font-semibold text-text">{p.title}</strong>
+                  <span className="mt-1 block text-xs text-dim leading-relaxed">{p.desc}</span>
+                </div>
               </li>
             ))}
           </ul>

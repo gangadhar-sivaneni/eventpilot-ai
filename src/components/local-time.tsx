@@ -16,19 +16,20 @@ function relative(iso: string) {
 
 // Timestamps are stored in UTC and shown in the viewer's timezone. The server renders UTC;
 // the browser swaps in local time after hydration. `relative` shows "in 3 days" with the exact time as a tooltip.
-export function LocalTime({ iso, fallback = "Not announced", relative: rel = false }: {
+export function LocalTime({ iso, fallback = "Not announced", relative: rel = false, className = "" }: {
   iso: string | null;
   fallback?: string;
   relative?: boolean;
+  className?: string;
 }) {
   const text = useSyncExternalStore(
     noop,
     () => (iso ? (rel ? relative(iso) : new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })) : null),
     () => (iso ? new Date(iso).toUTCString().replace(" GMT", " UTC").slice(5, -7) + " UTC" : null),
   );
-  if (!iso) return <span className="text-faint">{fallback}</span>;
+  if (!iso) return <span className={`text-faint ${className}`.trim()}>{fallback}</span>;
   return (
-    <time dateTime={iso} title={new Date(iso).toUTCString()} suppressHydrationWarning>
+    <time className={`whitespace-nowrap ${className}`.trim()} dateTime={iso} title={new Date(iso).toUTCString()} suppressHydrationWarning>
       {text}
     </time>
   );

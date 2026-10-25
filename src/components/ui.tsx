@@ -30,12 +30,27 @@ export function FeePill({ e }: { e: Pick<EventRow, "fee_status" | "fee_amount" |
   return <span className="pill">Fee unknown</span>;
 }
 
-export function PrizePill({ prize }: { prize: string | null }) {
+export function formatPrizeShort(prize: string): string {
+  const p = prize.trim();
+  // 1. Try to extract currency symbol + amount like ₹30,000, $50,000, €10,000, £2,500
+  const m1 = p.match(/(?:₹|\$|€|£|Rs\.?\s*)\s*[\d,]+(?:\s*(?:k|lakhs?|cr|m|b))?/i);
+  if (m1) return m1[0].replace(/\s+/g, "").trim();
+  // 2. Try to extract number + currency code like 30,000 INR, 50,000 USD
+  const m2 = p.match(/[\d,]+\s*(?:INR|USD|EUR|GBP|Lakhs?|Cr)/i);
+  if (m2) return m2[0].trim();
+  return p;
+}
+
+export function PrizePill({ prize, className = "" }: { prize: string | null; className?: string }) {
   if (!prize) return null;
+  const short = formatPrizeShort(prize);
   return (
-    <span className="pill pill-flare max-w-full" title={prize}>
-      <Trophy aria-hidden="true" />
-      <span className="truncate">{prize}</span>
+    <span
+      className={`pill pill-flare max-w-[5.25rem] sm:max-w-[6.25rem] shrink-0 justify-center overflow-hidden ${className}`.trim()}
+      title={prize}
+    >
+      <Trophy className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <span className="truncate min-w-0">{short}</span>
     </span>
   );
 }

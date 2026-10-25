@@ -98,4 +98,23 @@ def test_registration_deadline_is_never_used_as_event_start_or_lifetime():
         "starts_at": "2026-10-10",
         "registration_deadline": "2026-11-30",
     }, NOW)
-    assert completed is None and completed_reason == "event has already ended"
+    assert completed is None and completed_reason == "event has already started"
+
+
+def test_only_future_starting_events_pass_and_registration_has_a_destination():
+    raw = {"url": "https://example.com/event", "title": "AI Hackathon", "starts_at": "2026-10-20"}
+    row, reason = normalize(raw, NOW)
+    assert reason is None
+    assert row["registration_url"] == row["url"]
+    underway, reason = normalize({**raw, "starts_at": "2026-10-17", "ends_at": "2026-10-25"}, NOW)
+    assert underway is None and reason == "event has already started"
+    at_now, reason = normalize({**raw, "starts_at": NOW.isoformat()}, NOW)
+    assert at_now is None and reason == "event has already started"
+
+
+def test_invalid_explicit_registration_link_rejects_event():
+    row, reason = normalize({
+        "url": "https://example.com/event", "registration_url": "javascript:alert(1)",
+        "title": "AI Hackathon", "starts_at": "2026-10-20",
+    }, NOW)
+    assert row is None and reason == "invalid registration url"

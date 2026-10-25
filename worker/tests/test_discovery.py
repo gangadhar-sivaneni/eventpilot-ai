@@ -7,6 +7,7 @@ NOW = datetime(2026, 10, 18, tzinfo=timezone.utc)
 
 def test_scope_requires_technology_subject_not_just_conference_format():
     assert in_catalogue_scope({"title": "International Conference on Nonlocal Mechanics", "city": "Hyderabad", "country": "India"})
+    assert in_catalogue_scope({"title": "International Conference on Robotics", "city": "London", "country": "United Kingdom"})
     assert not in_catalogue_scope({"title": "International Conference on Art History", "city": "Hyderabad", "country": "India"})
     assert not in_catalogue_scope({"title": "IIT Hyderabad Half Marathon 2026", "description": "Running event at a technology campus", "city": "Hyderabad", "country": "India"})
 
@@ -37,14 +38,16 @@ def test_unchanged_event_facts_are_detected_without_check_timestamps():
     assert counts["imported"] == 0 and counts["updated"] == 0 and counts["unchanged"] == 1
 
 
-def test_expired_cleanup_uses_event_end_not_registration_deadline():
+def test_expired_cleanup_includes_event_end_and_closed_registration():
     expired = [
         {"id": 1, "starts_at": "2026-10-01T00:00:00+00:00", "ends_at": "2026-10-02T00:00:00+00:00"},
         {"id": 2, "starts_at": "2026-10-01T00:00:00+00:00", "ends_at": None},
+        {"id": 6, "starts_at": "2026-10-25T00:00:00+00:00", "registration_deadline": "2026-10-15T00:00:00+00:00"},
+        {"id": 7, "starts_at": "2026-10-25T00:00:00+00:00", "registration_status": "closed"},
     ]
     ongoing = [
-        {"id": 3, "starts_at": "2026-10-23T00:00:00+00:00", "ends_at": "2026-10-25T00:00:00+00:00"},
-        {"id": 4, "starts_at": "2026-10-25T00:00:00+00:00", "ends_at": None},
+        {"id": 3, "starts_at": "2026-10-23T00:00:00+00:00", "ends_at": "2026-10-25T00:00:00+00:00", "registration_deadline": "2026-10-22T00:00:00+00:00"},
+        {"id": 4, "starts_at": "2026-10-25T00:00:00+00:00", "ends_at": None, "registration_deadline": "2026-10-24T00:00:00+00:00"},
         {"id": 5, "starts_at": None, "ends_at": None},
     ]
-    assert expired_event_ids(expired + ongoing, NOW) == [1, 2]
+    assert expired_event_ids(expired + ongoing, NOW) == [1, 2, 6, 7]

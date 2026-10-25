@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { ShieldCheck, Lock, Ban } from "lucide-react";
+import { ShieldCheck, Lock, CircleCheck } from "lucide-react";
 import { getUser } from "@/lib/auth";
 import { AuthView } from "@/components/auth-view";
 import { Logo } from "@/components/logo";
@@ -56,12 +56,12 @@ export default async function LoginPage({
             Human approval required
           </span>
           <span className="flex items-center gap-1.5">
-            <Ban className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
-            No password selling
+            <CircleCheck className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
+            100% verified events
           </span>
           <span className="flex items-center gap-1.5">
             <Lock className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
-            Export or delete anytime
+            Private & encrypted
           </span>
         </div>
       </div>

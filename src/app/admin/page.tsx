@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
-import { Activity, Copy, Database } from "lucide-react";
+import { Activity, Copy, Database, Play } from "lucide-react";
 import { requireAdmin } from "@/lib/auth";
 import { LocalTime } from "@/components/local-time";
 import { PageHeader } from "@/components/ui";
+import { SubmitButton } from "@/components/submit-button";
+import { triggerScanAction } from "./actions";
 
 export const metadata: Metadata = { title: "Admin" };
 
@@ -26,7 +28,19 @@ export default async function AdminPage() {
 
   return (
     <div className="shell space-y-8 py-10">
-      <PageHeader eyebrow="Operations" title="Admin">Source health, worker runs and catalogue quality.</PageHeader>
+      <PageHeader
+        eyebrow="Operations"
+        title="Admin"
+        actions={
+          <form action={triggerScanAction}>
+            <SubmitButton className="btn btn-primary" pendingText="Dispatching scan…">
+              <Play className="h-4 w-4" aria-hidden="true" /> Trigger Scan Now
+            </SubmitButton>
+          </form>
+        }
+      >
+        Source health, worker runs and catalogue quality.
+      </PageHeader>
 
       <section className="card overflow-hidden" aria-labelledby="h-sources">
         <h2 id="h-sources" className="flex items-center gap-2 border-b border-line px-6 py-4 text-lg font-semibold"><Database className="h-5 w-5 text-accent" aria-hidden="true" /> Source health</h2>

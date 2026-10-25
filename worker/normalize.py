@@ -154,8 +154,13 @@ def normalize(raw: dict, now: datetime | None = None) -> tuple[dict | None, str 
     if not title or len(title) < 2:
         return None, "missing title"
 
-    raw_reg = canonical_url(raw.get("registration_url"))
-    reg_url, _ = validate_platform_url(raw_reg, is_registration=True) if raw_reg else (None, None)
+    raw_reg_value = raw.get("registration_url")
+    raw_reg = canonical_url(raw_reg_value) if raw_reg_value else None
+    if raw_reg_value and not raw_reg:
+        return None, "invalid registration url"
+    reg_url, reg_err = validate_platform_url(raw_reg, is_registration=True) if raw_reg else (url, None)
+    if raw_reg_value and not reg_url:
+        return None, reg_err or "invalid registration url"
 
     opens = to_utc(raw.get("registration_opens_at"))
     deadline = to_utc(raw.get("registration_deadline"), end_of_day=True)
@@ -166,11 +171,10 @@ def normalize(raw: dict, now: datetime | None = None) -> tuple[dict | None, str 
     if not starts:
         return None, "missing event start date"
 
-    # Registration deadlines are not event dates. Only the event's actual end
-    # (or start when no end is supplied) determines whether it has concluded.
-    conclusion = ends or starts
-    if datetime.fromisoformat(conclusion) <= now:
-        return None, "event has already ended"
+    # Only future-starting events belong in the discovery catalogue. Do not show
+    # events already underway, even when their published end time is later.
+    if datetime.fromisoformat(starts) <= now:
+        return None, "event has already started"
 
     fee_status, fee_amount, fee_currency = fee(raw.get("fee_status"), raw.get("fee_amount"), raw.get("fee_currency"))
 
@@ -178,7 +182,7 @@ def normalize(raw: dict, now: datetime | None = None) -> tuple[dict | None, str 
     row = {
         "external_id": str(raw["external_id"])[:200] if raw.get("external_id") not in (None, "") else None,
         "url": url,
-        "registration_url": reg_url,
+        "registration_url": reg_url or url,
         "title": title,
         "description": clean_text(raw.get("description"), 5000),
         "organizer": clean_text(raw.get("organizer"), 200),

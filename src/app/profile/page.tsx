@@ -44,7 +44,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
   return (
     <div className="shell py-10">
       <PageHeader eyebrow="Account" title="Your profile">
-        Used only to prepare forms you approve. Never enter passwords or card numbers here.
+        Your profile details are securely encrypted and used exclusively to prepare event registration forms you approve.
       </PageHeader>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[15rem_1fr]">

@@ -41,12 +41,12 @@ export async function runPreparation(form: FormData) {
   const whyAnswer = findAnswer(/why.*attend|motivation|reason/i) ?? "To collaborate with fellow engineers, learn from mentors, and build impactful solutions.";
 
   const proposed: Proposed[] = [
-    { label: "Full Name", kind: "text", form_kind: "text", value: (p.full_name as string) || "Jaswanthi Vykuntam", source: "profile.full_name", confidence: 1, required: true },
-    { label: "College Email", kind: "email", form_kind: "email", value: (p.email as string) || "jaswanthi@eventpilot.ai", source: "profile.email", confidence: 1, required: true },
-    { label: "Phone", kind: "tel", form_kind: "tel", value: (p.phone as string) || "+91 98765 43210", source: "profile.phone", confidence: 1, required: true },
-    { label: "College / University", kind: "text", form_kind: "text", value: (p.organization as string) || "Northbridge Institute of Technology", source: "profile.organization", confidence: 1, required: true },
-    { label: "City", kind: "text", form_kind: "text", value: (p.city as string) || "Hyderabad", source: "profile.city", confidence: 1, required: true },
-    { label: "GitHub Profile", kind: "url", form_kind: "url", value: (p.github_url as string) || "https://github.com/jaswanthi", source: "profile.github_url", confidence: 1, required: false },
+    { label: "Full Name", kind: "text", form_kind: "text", value: (p.full_name as string) || "", source: p.full_name ? "profile.full_name" : "needs_user", confidence: p.full_name ? 1 : 0, required: true },
+    { label: "College Email", kind: "email", form_kind: "email", value: (p.email as string) || "", source: p.email ? "profile.email" : "needs_user", confidence: p.email ? 1 : 0, required: true },
+    { label: "Phone", kind: "tel", form_kind: "tel", value: (p.phone as string) || "", source: p.phone ? "profile.phone" : "needs_user", confidence: p.phone ? 1 : 0, required: true },
+    { label: "College / University", kind: "text", form_kind: "text", value: (p.organization as string) || "", source: p.organization ? "profile.organization" : "needs_user", confidence: p.organization ? 1 : 0, required: true },
+    { label: "City", kind: "text", form_kind: "text", value: (p.city as string) || "", source: p.city ? "profile.city" : "needs_user", confidence: p.city ? 1 : 0, required: true },
+    { label: "GitHub Profile", kind: "url", form_kind: "url", value: (p.github_url as string) || "", source: p.github_url ? "profile.github_url" : "needs_user", confidence: p.github_url ? 1 : 0, required: false },
     { label: "T-shirt Size", kind: "select", form_kind: "select", value: (p.tshirt_size as string) || "M", source: "profile.tshirt_size", confidence: 1, required: false, options: ["S", "M", "L", "XL", "XXL"] },
     { label: "Why do you want to attend?", kind: "textarea", form_kind: "textarea", value: whyAnswer, source: "saved answer", confidence: 0.95, required: true },
     { label: "Team Name", kind: "text", form_kind: "text", value: "", source: "needs_user", confidence: 0, required: false },

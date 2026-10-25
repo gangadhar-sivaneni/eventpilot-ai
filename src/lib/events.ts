@@ -57,10 +57,14 @@ export function sourceName(e: { event_sources?: { name: string } | null; url?: s
   const org = (e.organizer ?? "").toLowerCase();
 
   // 1. High-priority exact brand and campus attribution
+  if (u.includes("intellicon") || org.includes("intellicon") || org.includes("global ai community")) return "Global AI Community (Microsoft)";
   if (u.includes("microsoft") || org.includes("microsoft")) return "Microsoft";
   if (u.includes("servicenow") || org.includes("servicenow")) return "ServiceNow";
   if (u.includes("salesforce") || org.includes("salesforce")) return "Salesforce";
   if (u.includes("thoughtworks") || org.includes("thoughtworks")) return "Thoughtworks";
+  if (u.includes("oracle") || org.includes("oracle")) return "Oracle";
+  if (u.includes("qualcomm") || org.includes("qualcomm")) return "Qualcomm";
+  if (u.includes("uber") || org.includes("uber")) return "Uber";
   if (u.includes("t-hub") || org.includes("t-hub")) return "T-Hub Hyderabad";
   if (u.includes("tworks") || org.includes("t-works")) return "T-Works Hyderabad";
 
@@ -79,6 +83,8 @@ export function sourceName(e: { event_sources?: { name: string } | null; url?: s
   if (u.includes("griet.ac.in") || org.includes("griet") || org.includes("gokaraju")) return "GRIET Hyderabad";
   if (u.includes("bvrit.ac.in") || org.includes("bvrit")) return "BVRIT Hyderabad";
   if (u.includes("sreenidhi.edu.in") || org.includes("snist") || org.includes("sreenidhi") || u.includes("roboveda")) return "SNIST Hyderabad";
+  if (u.includes("cvr.ac.in") || org.includes("cvr")) return "CVR College";
+  if (u.includes("vardhaman.org") || org.includes("vardhaman")) return "Vardhaman College";
   if (u.includes("ibsindia") || org.includes("icfai") || org.includes("ibs hyderabad")) return "ICFAI / IBS Hyderabad";
 
   // Tech communities
@@ -106,10 +112,13 @@ export function sourceName(e: { event_sources?: { name: string } | null; url?: s
   if (u.includes("unstop.com")) return "Unstop";
   if (u.includes("devpost.com")) return "Devpost";
   if (u.includes("devfolio.co")) return "Devfolio";
+  if (u.includes("lu.ma") || u.includes("luma.com")) return "Luma";
+  if (u.includes("studenttribe.in")) return "StudentTribe";
   if (u.includes("hackerearth.com")) return "HackerEarth";
   if (u.includes("mlh.io")) return "Major League Hacking";
 
   if (e.organizer) return e.organizer.split(",")[0].trim();
+
 
   try {
     const host = new URL(e.url ?? "").hostname.replace(/^www\./, "");

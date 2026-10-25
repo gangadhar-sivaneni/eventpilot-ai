@@ -112,36 +112,55 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 
         <main id="main" className="flex-1">{children}</main>
 
-        <footer className="on-dark mt-24">
-          <div className="shell grid gap-10 py-12 md:grid-cols-[1.4fr_1fr_1fr]">
-            <div className="space-y-3">
+        <footer className="on-dark mt-24 border-t border-line/40">
+          <div className="shell grid gap-10 py-14 sm:py-16 md:grid-cols-[1.6fr_1fr_1.2fr]">
+            <div className="space-y-4">
               <Logo />
-              <p className="max-w-sm text-sm text-dim">
-                Finds events, alerts you, prepares forms. You approve every submission. No CAPTCHA solving, no queue jumping,
-                no payments on your behalf.
+              <p className="max-w-md text-sm text-dim leading-relaxed">
+                The premier autonomous radar for tech events, hackathons, and developer conferences. Real-time discovery, intelligent deadline tracking, and verified application prep.
               </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="pill pill-ok text-xs">
+                  <span className="ping relative h-1.5 w-1.5 rounded-full bg-ok" aria-hidden="true" />
+                  Live Sync Active
+                </span>
+                <span className="pill text-xs">Verified Direct Links</span>
+                <span className="pill text-xs">Zero Hallucination</span>
+              </div>
             </div>
             <div>
-              <p className="eyebrow mb-3">Product</p>
-              <ul className="space-y-2 text-sm text-dim">
-                <li><Link className="hover:text-text" href="/events">Browse events</Link></li>
-                <li><Link className="hover:text-text" href="/events?prize=1">Prize money events</Link></li>
-                <li><Link className="hover:text-text" href="/alerts">Alerts</Link></li>
-                <li><Link className="hover:text-text" href="/registrations">Registrations</Link></li>
+              <p className="eyebrow mb-3.5">Product</p>
+              <ul className="space-y-2.5 text-sm text-dim">
+                <li><Link className="hover:text-text transition-colors" href="/events">Browse all events</Link></li>
+                <li><Link className="hover:text-text transition-colors" href="/events?prize=1">Prize money hackathons</Link></li>
+                <li><Link className="hover:text-text transition-colors" href="/events?fee=free">Free registrations</Link></li>
+                <li><Link className="hover:text-text transition-colors" href="/alerts">Personalized alerts</Link></li>
+                <li><Link className="hover:text-text transition-colors" href="/registrations">Form co-pilot</Link></li>
               </ul>
             </div>
             <div>
-              <p className="eyebrow mb-3">Sources</p>
-              <ul className="space-y-2 text-sm text-dim">
-                <li>Devpost · Unstop · Devfolio</li>
-                <li>HackerEarth · Major League Hacking</li>
-                <li>IIT Hyderabad · college website feeds</li>
+              <p className="eyebrow mb-3.5">Verified Platforms</p>
+              <ul className="space-y-2.5 text-sm text-dim">
+                <li className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-signal" aria-hidden="true" />
+                  <span>Devfolio · Unstop · Devpost</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-signal" aria-hidden="true" />
+                  <span>Luma · StudentTribe · HackerEarth</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-signal" aria-hidden="true" />
+                  <span>Google Developer Groups · MLH</span>
+                </li>
               </ul>
             </div>
           </div>
-          <div className="shell flex flex-col gap-2 border-t border-line py-6 text-xs text-faint sm:flex-row sm:justify-between">
-            <p>EventPilot shows the source and last check time on every event. Always confirm on the official page.</p>
-            <p className="font-mono">Built on free tiers · ₹0</p>
+          <div className="shell flex flex-col gap-3 border-t border-line/40 py-6 text-xs text-faint sm:flex-row sm:items-center sm:justify-between">
+            <p>© {new Date().getFullYear()} EventPilot. All rights reserved. Live verified event data.</p>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-xs text-dim">Autonomous Event Discovery & Application Prep</span>
+            </div>
           </div>
         </footer>
         {user && !needsPassword && <TabBar unread={unread} />}

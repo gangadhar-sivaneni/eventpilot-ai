@@ -581,7 +581,7 @@ export function AuthView({
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="e.g. Jaswanthi Vykuntam"
+                    placeholder="Your name"
                     className="field pl-10"
                     disabled={busy}
                   />

@@ -11,23 +11,26 @@ import re
 from datetime import datetime
 
 import db
+from net import verify_public_link
 from normalize import canonical_url, normalize
 from scrapers import REGISTRY
 
 ENUMS = {"format", "fee_status", "registration_status"}
 TECH_EVENT = re.compile(
     r"\b(software|developer|programming|coding|hackathon|ideathon|artificial intelligence|ai|"
-    r"machine learning|data science|cyber ?security|cloud computing|web development|app development|"
-    r"robotics|blockchain|open source|computer science|technology|tech fest|it|iot|hardware|"
+    r"genai|generative ai|machine learning|data science|cyber ?security|cloud computing|web development|app development|"
+    r"robotics|blockchain|open source|computer science|technology|tech fest|tech|it|iot|hardware|"
     r"devops|kubernetes|fintech|copilot|engineering|engineers?|semiconductor|photonics|"
     r"fiber optics|mechanics|structural|quantum computing|electronics|information security)\b",
     re.I,
 )
+
 TECH_EVENT_KIND = re.compile(r"\b(conference|symposium|summit|conclave|workshop|bootcamp|expo|seminar|webinar)\b", re.I)
+STALE_LINK_CHECK_BUDGET = 6  # old links are refreshed in small batches on each 10-minute run
 
 
 def in_catalogue_scope(raw: dict) -> bool:
-    """Only publish topic-specific technology events with Hyderabad/India or online scope."""
+    """Publish topic-specific technology events worldwide."""
     title_and_categories = " ".join(str(v) for v in (
         raw.get("title"), *(raw.get("categories") or [])
     ) if v)
@@ -39,13 +42,7 @@ def in_catalogue_scope(raw: dict) -> bool:
     if not title_has_tech_subject and not description_confirms_tech:
         return False
 
-    fmt = str(raw.get("format") or "").lower()
-    if fmt in {"online", "virtual", "digital", "remote"}:
-        return True
-
-    city = str(raw.get("city") or "").strip().lower()
-    country = str(raw.get("country") or "").strip().lower()
-    return country in {"india", "in"} or "hyderabad" in city
+    return True
 
 
 def plan_rows(raws, source_id: int, existing: dict[str, dict | str], now) -> tuple[list[dict], dict]:
@@ -104,6 +101,16 @@ def upsert(rows: list[dict]) -> int:
                     try:
                         table.upsert(r, on_conflict="url", default_to_null=False, returning="minimal").execute()
                     except Exception as err:
+                        if "events_source_id_external_id_key" in str(err) and r.get("external_id"):
+                            try:
+                                existing = table.select("id").eq("source_id", r["source_id"]) \
+                                    .eq("external_id", r["external_id"]).maybe_single().execute().data
+                                if existing:
+                                    table.update(r).eq("id", existing["id"]).execute()
+                                    print(f"  recovered changed URL for source event {r['external_id'][:80]}")
+                                    continue
+                            except Exception as recovery_error:
+                                err = recovery_error
                         failed += 1
                         print(f"  upsert failed for {r['url'][:120]}: {str(err)[:200]}")
     return failed
@@ -138,17 +145,61 @@ def run_source(source: dict) -> None:
                 unchanged_urls.append(row["url"])
             else:
                 changed.append(row)
-        counts["failed"] = upsert(changed)
         stamp = db.iso(now)
+        # Link checks are repeated at least daily. New or materially changed event
+        # records always have their event and registration entry pages checked now.
+        changed_urls = {r["url"] for r in changed}
+        changed_to_check, stale_to_check = [], []
+        for row in rows:
+            old = existing.get(row["url"])
+            verified_at = (old or {}).get("quality_verified_at") if isinstance(old, dict) else None
+            try:
+                is_stale = not verified_at or (now - datetime.fromisoformat(verified_at.replace("Z", "+00:00"))).total_seconds() >= 86400
+            except (ValueError, TypeError):
+                is_stale = True
+            if row["url"] in changed_urls:
+                changed_to_check.append(row)
+            elif is_stale:
+                stale_to_check.append((verified_at or "", row))
+        stale_to_check.sort(key=lambda item: item[0])
+        to_check = changed_to_check + [row for _, row in stale_to_check[:STALE_LINK_CHECK_BUDGET]]
+        link_failures = []
+        link_successes = []
+        for row in to_check:
+            try:
+                verify_public_link(row["url"])
+                registration_url = row.get("registration_url") or row["url"]
+                if registration_url != row["url"]:
+                    verify_public_link(registration_url)
+                row["quality_verified_at"] = stamp
+                link_successes.append(row["url"])
+            except Exception as err:
+                row["quality_verified_at"] = None
+                link_failures.append(row["url"])
+                print(f"  link check failed {row['url'][:120]}: {str(err)[:160]}")
+        counts["links_checked"] = len(to_check)
+        counts["links_failed"] = len(link_failures)
+        counts["failed"] = upsert(changed)
+        for batch in db.chunks(link_failures, 100):
+            try:
+                db.client().table("events").update({"quality_verified_at": None}).in_("url", batch).execute()
+            except Exception as err:
+                counts["failed"] += len(batch)
+                print(f"  failed-link quarantine failed: {str(err)[:200]}")
         for batch in db.chunks(unchanged_urls, 100):
             try:
-                db.client().table("events").update({
-                    "last_checked_at": stamp,
-                    "quality_verified_at": stamp,
-                }).in_("url", batch).execute()
+                db.client().table("events").update({"last_checked_at": stamp}).in_("url", batch).execute()
             except Exception as err:
                 counts["failed"] += len(batch)
                 print(f"  unchanged refresh failed: {str(err)[:200]}")
+        for batch in db.chunks(link_successes, 100):
+            try:
+                verified_urls = [u for u in batch if u in unchanged_urls]
+                if verified_urls:
+                    db.client().table("events").update({"quality_verified_at": stamp}).in_("url", verified_urls).execute()
+            except Exception as err:
+                counts["failed"] += len(verified_urls)
+                print(f"  link verification timestamp refresh failed: {str(err)[:200]}")
     except Exception as err:
         error = f"{type(err).__name__}: {err}"
         traceback.print_exc()
@@ -162,26 +213,50 @@ def run_source(source: dict) -> None:
 
 
 def expired_event_ids(events: list[dict], now: datetime) -> list[int]:
-    """Select ended events using event time only; registration deadlines do not extend them."""
+    """Select ended events or events whose registration has closed / deadline has passed."""
     expired = []
     for event in events:
         event_end = event.get("ends_at") or event.get("starts_at")
-        if not event_end:
-            continue
-        event_end = datetime.fromisoformat(event_end.replace("Z", "+00:00"))
-        if event_end <= now:
+        if event_end:
+            try:
+                dt_event = datetime.fromisoformat(event_end.replace("Z", "+00:00"))
+                if dt_event <= now:
+                    expired.append(event["id"])
+                    continue
+            except (ValueError, TypeError):
+                pass
+        starts = event.get("starts_at")
+        if starts:
+            try:
+                dt_start = datetime.fromisoformat(starts.replace("Z", "+00:00"))
+                if dt_start <= now:
+                    expired.append(event["id"])
+                    continue
+            except (ValueError, TypeError):
+                pass
+        reg_deadline = event.get("registration_deadline")
+        if reg_deadline:
+            try:
+                dt_reg = datetime.fromisoformat(reg_deadline.replace("Z", "+00:00"))
+                if dt_reg <= now:
+                    expired.append(event["id"])
+                    continue
+            except (ValueError, TypeError):
+                pass
+        if event.get("registration_status") == "closed":
             expired.append(event["id"])
+            continue
     return expired
 
 
 def delete_expired_events() -> int:
-    """Delete events after their end (or their start when no end was published)."""
+    """Delete events after their end, or when registration has ended / closed."""
     now = db.now()
     table = db.client().table("events")
     expired_ids, offset, page_size = [], 0, 500
     try:
         while True:
-            page = table.select("id,starts_at,ends_at").range(offset, offset + page_size - 1).execute().data
+            page = table.select("id,starts_at,ends_at,registration_deadline,registration_status").range(offset, offset + page_size - 1).execute().data
             expired_ids.extend(expired_event_ids(page, now))
             if len(page) < page_size:
                 break
@@ -191,7 +266,7 @@ def delete_expired_events() -> int:
             table.delete().in_("id", batch).execute()
             total_deleted += len(batch)
         if total_deleted:
-            print(f"Housekeeping: deleted {total_deleted} ended events")
+            print(f"Housekeeping: deleted {total_deleted} ended/closed registration events")
         return total_deleted
     except Exception as err:
         print(f"  delete_expired_events FAILED: {err}")

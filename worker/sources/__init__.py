@@ -7,10 +7,13 @@ from scrapers import (
     college_rss,
     devfolio,
     devpost,
+    gdg,
     hackerearth,
+    iit_hyd,
+    luma,
     mlh,
+    studenttribe,
     synthetic,
-    tech_community,
     unstop,
 )
 
@@ -19,9 +22,12 @@ __all__ = [
     "college_rss",
     "devfolio",
     "devpost",
+    "gdg",
     "hackerearth",
+    "iit_hyd",
+    "luma",
     "mlh",
+    "studenttribe",
     "synthetic",
-    "tech_community",
     "unstop",
 ]

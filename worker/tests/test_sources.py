@@ -2,7 +2,19 @@
 from datetime import datetime
 
 from bs4 import BeautifulSoup
-from scrapers import college_rss, devfolio, devpost, hackerearth, iit_hyd, mlh, unstop
+from scrapers import (
+    college_rss,
+    devfolio,
+    devpost,
+    gdg,
+    hackerearth,
+    iit_hyd,
+    luma,
+    mlh,
+    studenttribe,
+    unstop,
+)
+
 
 
 def test_devpost_parse_does_not_promote_submission_dates_to_event_dates():
@@ -75,12 +87,12 @@ def test_unstop_uses_published_activity_dates_and_skips_registration_windows():
     assert explicit["ends_at"] == "2026-11-02T18:00:00+05:30"
 
 
-def test_unstop_enriches_only_tech_events_in_supported_geography():
+def test_unstop_enriches_tech_events_worldwide():
     assert unstop.needs_event_detail({"title": "AI Hackathon", "categories": ["hackathon"], "format": "online"})
     assert unstop.needs_event_detail({"title": "Cloud Workshop", "description": "Learn cloud computing",
                                       "categories": ["workshop"], "city": "Hyderabad", "country": "India"})
     assert not unstop.needs_event_detail({"title": "Cultural Fest", "categories": ["festival"], "city": "Hyderabad"})
-    assert not unstop.needs_event_detail({"title": "AI Hackathon", "categories": ["hackathon"], "city": "London"})
+    assert unstop.needs_event_detail({"title": "AI Hackathon", "categories": ["hackathon"], "city": "London"})
 
 
 def test_devfolio_prize_needs_money():
@@ -122,3 +134,86 @@ def test_iit_hyderabad_calendar_uses_its_published_event_date():
       Register for IIT Hyderabad Half Marathon 2026 - running at a technology campus</a></h3>
       <p>22 Nov 2026</p></article>''', "html.parser").article
     assert iit_hyd.parse(nontechnical)["title"] == "Register for IIT Hyderabad Half Marathon 2026"
+
+
+def test_luma_parse_extracts_tech_event():
+    item = {
+        "event": {
+            "api_id": "evt-1234",
+            "url": "ai-agents-hyd",
+            "name": "Hyderabad AI Agent Builders Meetup",
+            "start_at": "2026-11-15T10:00:00.000Z",
+            "end_at": "2026-11-15T13:00:00.000Z",
+            "location_type": "offline",
+            "geo_address_info": {"city": "Hyderabad", "country": "India"},
+            "description": "Building autonomous AI agents with Python."
+        },
+        "calendar": {"name": "AI Hyderabad"},
+        "ticket_info": {"is_free": True}
+    }
+    row = luma.parse(item, "Hyderabad", "India")
+    assert row is not None
+    assert row["url"] == "https://lu.ma/ai-agents-hyd"
+    assert row["format"] == "in_person"
+    assert row["city"] == "Hyderabad"
+    assert row["fee_status"] == "free"
+    assert row["registration_status"] == "open"
+
+    non_tech = {
+        "event": {
+            "api_id": "evt-5678",
+            "url": "pottery-sunday",
+            "name": "Sunday Pottery Workshop",
+            "start_at": "2026-11-15T10:00:00.000Z",
+            "location_type": "offline",
+        }
+    }
+    assert luma.parse(non_tech, "Hyderabad", "India") is None
+
+
+def test_studenttribe_parse_extracts_event():
+    sample = {
+        "id": "st-uuid-1",
+        "slug": "campus-hack-2026",
+        "title": "Hyderabad Campus Hackathon 2026",
+        "hostName": "Tech Fest Team",
+        "startDate": "2026-11-20T09:00:00.000Z",
+        "endDate": "2026-11-21T18:00:00.000Z",
+        "bookingOpensAt": "2026-10-20T00:00:00.000Z",
+        "bookingClosesAt": "2026-11-19T23:59:00.000Z",
+        "canBookTickets": True,
+        "isSoldOut": False,
+        "entryType": "paid",
+        "startPrice": "199.00",
+        "location": {"city": "Hyderabad", "type": "offline"}
+    }
+    row = studenttribe.parse(sample)
+    assert row is not None
+    assert row["url"] == "https://app.studenttribe.in/events/campus-hack-2026"
+    assert row["registration_status"] == "open"
+    assert row["fee_status"] == "paid"
+    assert row["fee_amount"] == 199.0
+    assert row["fee_currency"] == "INR"
+    assert row["city"] == "Hyderabad"
+
+
+def test_gdg_parse_extracts_live_event():
+    sample = {
+        "id": 99887,
+        "title": "DevFest Hyderabad 2026",
+        "static_url": "https://gdg.community.dev/e/devfest-hyd-2026/",
+        "start_date": "2026-11-28T09:00:00Z",
+        "end_date": "2026-11-28T17:00:00Z",
+        "chapter_title": "GDG Hyderabad",
+        "is_virtual_event": False,
+        "audience_type": "IN_PERSON",
+        "description_short": "Annual flagship developer conference."
+    }
+    row = gdg.parse(sample)
+    assert row is not None
+    assert row["url"] == "https://gdg.community.dev/e/devfest-hyd-2026/"
+    assert row["registration_url"] == "https://gdg.community.dev/e/devfest-hyd-2026/"
+    assert row["format"] == "in_person"
+    assert row["fee_status"] == "free"
+    assert "gdg" in row["categories"]
+

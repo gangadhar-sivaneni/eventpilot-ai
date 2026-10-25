@@ -54,6 +54,7 @@ class devpost:
         return {
             "external_id": h["id"],
             "url": h["url"],
+            "registration_url": h["url"],
             "title": h["title"],
             "organizer": h.get("organization_name"),
             "format": "online" if is_online else "in_person",
@@ -67,18 +68,52 @@ class devpost:
         }
 
     @classmethod
+    def published_event_window(cls, page_url: str) -> tuple[str | None, str | None, str | None]:
+        """Fetch published Schema.org Event structured data directly from the hackathon page."""
+        try:
+            html = http(page_url, cls.ALLOWED_HOSTS).text
+            soup = BeautifulSoup(html, "html.parser")
+            for script in soup.select('script[type="application/ld+json"]'):
+                try:
+                    data = json.loads(script.string or script.get_text())
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                if isinstance(data, dict) and data.get("@type") == "Event":
+                    start = data.get("startDate")
+                    end = data.get("endDate")
+                    loc = data.get("location") or {}
+                    addr = loc.get("address") if isinstance(loc, dict) else {}
+                    city = addr.get("addressLocality") if isinstance(addr, dict) else None
+                    return start, end, city
+        except Exception as err:
+            print(f"  devpost detail notice for {page_url}: {err}")
+        return None, None, None
+
+    @classmethod
     def fetch(cls):
         for page in range(1, cls.PAGES + 1):
             try:
-                url = f"https://devpost.com/api/hackathons?status[]=upcoming&status[]=open&order_by=recently-added&page={page}"
+                url = f"https://devpost.com/api/hackathons?status[]=upcoming&order_by=recently-added&page={page}"
                 res = http(url, cls.ALLOWED_HOSTS).json()
                 items = res.get("hackathons") or []
                 if not items:
                     break
-                yield from filter(None, map(cls.parse, items))
+                for h in items:
+                    parsed = cls.parse(h)
+                    if not parsed:
+                        continue
+                    if not parsed.get("starts_at") and parsed.get("url"):
+                        start, end, city = cls.published_event_window(parsed["url"])
+                        if start:
+                            parsed["starts_at"] = start
+                            parsed["ends_at"] = end
+                            if city and not parsed.get("city"):
+                                parsed["city"] = city
+                    yield parsed
             except Exception as err:
                 print(f"  devpost page {page} notice: {err}")
                 break
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -158,18 +193,14 @@ class unstop:
 
     @classmethod
     def needs_event_detail(cls, row: dict) -> bool:
-        """Only spend a detail request when a dated tech listing could pass catalogue scope."""
+        """Only spend a detail request when a dated worldwide tech listing could pass scope."""
         title = str(row.get("title") or "")
         title_and_categories = " ".join([title, *(str(v) for v in row.get("categories") or [])])
         description = str(row.get("description") or "")
         tech = bool(cls.TECH.search(title_and_categories)) or bool(
             cls.TECH_KIND.search(title) and cls.TECH.search(description)
         )
-        fmt = str(row.get("format") or "").lower()
-        city = str(row.get("city") or "").lower()
-        country = str(row.get("country") or "").lower()
-        in_region = fmt in {"online", "virtual", "digital", "remote"} or country in {"india", "in"} or "hyderabad" in city
-        return tech and in_region
+        return tech
 
     @classmethod
     def parse(cls, o: dict, kind: str) -> dict:
@@ -287,9 +318,15 @@ class devfolio:
 
     @classmethod
     def fetch(cls):
-        body = {"type": "application_open", "from": 0, "size": 200}
-        for hit in http("https://api.devfolio.co/api/search/hackathons", cls.ALLOWED_HOSTS, json_body=body).json()["hits"]["hits"]:
-            yield cls.parse(hit["_source"])
+        for q_type in ["application_open", "upcoming"]:
+            try:
+                body = {"type": q_type, "from": 0, "size": 200}
+                res = http("https://api.devfolio.co/api/search/hackathons", cls.ALLOWED_HOSTS, json_body=body).json()
+                for hit in (res.get("hits") or {}).get("hits") or []:
+                    yield cls.parse(hit["_source"])
+            except Exception as err:
+                print(f"  devfolio {q_type} notice: {err}")
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -546,6 +583,215 @@ class iit_hyd:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 7. LUMA TECH & BUILDER EVENTS SCRAPER
+# ─────────────────────────────────────────────────────────────────────────────
+class luma:
+    """Luma tech community meetups, workshops, and AI builder sessions."""
+    KEY = "luma"
+    ALLOWED_HOSTS = {"api.lu.ma", "lu.ma"}
+    HUBS = [
+        ("Hyderabad", 17.3850, 78.4867, "India"),
+        ("Bengaluru", 12.9716, 77.5946, "India"),
+        ("Delhi NCR", 28.6139, 77.2090, "India"),
+        ("Mumbai", 19.0760, 72.8777, "India"),
+        ("Pune", 18.5204, 73.8567, "India"),
+        ("Chennai", 13.0827, 80.2707, "India"),
+        ("San Francisco", 37.7749, -122.4194, "United States"),
+    ]
+    TECH_WORDS = re.compile(
+        r"\b(software|developer|programming|coding|hackathon|ideathon|artificial intelligence|ai|"
+        r"machine learning|data science|cyber ?security|cloud computing|web development|app development|"
+        r"robotics|blockchain|open source|computer science|technology|tech fest|it|iot|hardware|"
+        r"devops|kubernetes|fintech|copilot|engineering|engineers?|semiconductor|photonics|"
+        r"python|react|frontend|backend|quantum computing|electronics|information security|agents?)\b",
+        re.I,
+    )
+
+    @classmethod
+    def parse(cls, item: dict, default_city: str, default_country: str) -> dict | None:
+        ev = item.get("event") or {}
+        slug = ev.get("url")
+        if not slug:
+            return None
+        event_url = f"https://lu.ma/{slug}"
+        name = ev.get("name") or ""
+        start = ev.get("start_at")
+        end = ev.get("end_at")
+        if not start:
+            return None
+        desc = ev.get("description") or ""
+        if not (cls.TECH_WORDS.search(name) or cls.TECH_WORDS.search(desc)):
+            return None
+
+        geo = ev.get("geo_address_info") or {}
+        event_city = geo.get("city") or default_city
+        event_country = geo.get("country") or default_country
+        is_offline = ev.get("location_type") == "offline"
+        event_format = "in_person" if is_offline else "online"
+
+        ticket_info = item.get("ticket_info") or {}
+        is_free = ticket_info.get("is_free", True)
+
+        return {
+            "external_id": ev.get("api_id") or slug,
+            "url": event_url,
+            "registration_url": event_url,
+            "title": name,
+            "description": desc or None,
+            "organizer": (item.get("calendar") or {}).get("name") or "Tech Community",
+            "format": event_format,
+            "city": event_city,
+            "country": event_country,
+            "starts_at": start,
+            "ends_at": end,
+            "registration_status": "open",
+            "fee_status": "free" if is_free else "paid",
+            "categories": ["meetup", "technology", "workshop"],
+        }
+
+    @classmethod
+    def fetch(cls):
+        seen_urls = set()
+        for city_name, lat, lng, country_name in cls.HUBS:
+            try:
+                url = f"https://api.lu.ma/discover/get-paginated-events?latitude={lat}&longitude={lng}"
+                res = http(url, cls.ALLOWED_HOSTS).json()
+                for item in res.get("entries") or []:
+                    row = cls.parse(item, city_name, country_name)
+                    if row and row["url"] not in seen_urls:
+                        seen_urls.add(row["url"])
+                        yield row
+            except Exception as err:
+                print(f"  luma {city_name} notice: {err}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. STUDENTTRIBE SCRAPER
+# ─────────────────────────────────────────────────────────────────────────────
+class studenttribe:
+    """StudentTribe campus passes, student fests, and hackathons (Hyderabad/AP)."""
+    KEY = "studenttribe"
+    ALLOWED_HOSTS = {"stapp.studenttribe.in", "studenttribe.in", "app.studenttribe.in"}
+    PAGES = 3
+
+    @classmethod
+    def parse(cls, e: dict) -> dict | None:
+        slug = e.get("slug")
+        if not slug:
+            return None
+        event_url = f"https://app.studenttribe.in/events/{slug}"
+        start = e.get("startDate")
+        end = e.get("endDate")
+        if not start:
+            return None
+
+        is_sold_out = bool(e.get("isSoldOut"))
+        can_book = bool(e.get("canBookTickets", True))
+        reg_status = "closed" if is_sold_out or not can_book else "open"
+
+        price_str = e.get("startPrice") or "0"
+        try:
+            price = float(price_str)
+        except (ValueError, TypeError):
+            price = 0.0
+
+        is_free = e.get("entryType") == "free" or price == 0.0
+        loc = e.get("location") or {}
+        city = loc.get("city") or "Hyderabad"
+        is_offline = loc.get("type") == "offline"
+
+        return {
+            "external_id": f"st-{e.get('id') or slug}",
+            "url": event_url,
+            "registration_url": event_url,
+            "title": e.get("title"),
+            "organizer": e.get("hostName") or "StudentTribe",
+            "format": "in_person" if is_offline else "online",
+            "city": city,
+            "country": "India",
+            "starts_at": start,
+            "ends_at": end,
+            "registration_opens_at": e.get("bookingOpensAt"),
+            "registration_deadline": e.get("bookingClosesAt"),
+            "registration_status": reg_status,
+            "fee_status": "free" if is_free else "paid",
+            "fee_amount": price if price > 0 else None,
+            "fee_currency": "INR" if price > 0 else None,
+            "categories": ["college", "student", "fest"],
+        }
+
+    @classmethod
+    def fetch(cls):
+        for page in range(1, cls.PAGES + 1):
+            try:
+                url = f"https://stapp.studenttribe.in/api/legacy/events?listing=active&page={page}&limit=50"
+                res = http(url, cls.ALLOWED_HOSTS).json()
+                items = res.get("data") or []
+                if not items:
+                    break
+                for e in items:
+                    row = cls.parse(e)
+                    if row:
+                        yield row
+            except Exception as err:
+                print(f"  studenttribe page {page} notice: {err}")
+                break
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. GOOGLE DEVELOPER GROUPS (GDG) SCRAPER
+# ─────────────────────────────────────────────────────────────────────────────
+class gdg:
+    """Google Developer Groups and DevFest tech conferences & workshops."""
+    KEY = "gdg"
+    ALLOWED_HOSTS = {"gdg.community.dev"}
+    PAGES = 5
+
+    @classmethod
+    def parse(cls, e: dict) -> dict | None:
+        static_url = e.get("static_url")
+        if not static_url:
+            return None
+        start = e.get("start_date")
+        end = e.get("end_date")
+        if not start:
+            return None
+
+        is_virtual = e.get("is_virtual_event") or e.get("audience_type") == "VIRTUAL"
+        return {
+            "external_id": f"gdg-{e.get('id')}",
+            "url": static_url,
+            "registration_url": static_url,
+            "title": e.get("title"),
+            "description": e.get("description_short") or e.get("description"),
+            "organizer": e.get("chapter_title") or "Google Developer Groups",
+            "format": "online" if is_virtual else "in_person",
+            "starts_at": start,
+            "ends_at": end,
+            "registration_status": "open",
+            "fee_status": "free",
+            "categories": ["gdg", "developer", "google", "tech"],
+        }
+
+    @classmethod
+    def fetch(cls):
+        for page in range(1, cls.PAGES + 1):
+            try:
+                url = f"https://gdg.community.dev/api/event_slim/?status=Live&page={page}&page_size=100"
+                res = http(url, cls.ALLOWED_HOSTS).json()
+                items = res.get("results") or []
+                if not items:
+                    break
+                for e in items:
+                    row = cls.parse(e)
+                    if row:
+                        yield row
+            except Exception as err:
+                print(f"  gdg page {page} notice: {err}")
+                break
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Test-only adapter (not registered for production discovery).
 
 class synthetic:
@@ -591,7 +837,6 @@ class synthetic:
         }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # UNIFIED REGISTRY
 # ─────────────────────────────────────────────────────────────────────────────
 REGISTRY = {
@@ -603,5 +848,9 @@ REGISTRY = {
         mlh,
         college_rss,
         iit_hyd,
+        luma,
+        studenttribe,
+        gdg,
     )
 }
+

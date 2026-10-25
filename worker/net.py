@@ -61,7 +61,8 @@ def check_url(url: str, allowed_hosts: set[str]) -> None:
 def _robots(origin: str) -> urllib.robotparser.RobotFileParser:
     rp = urllib.robotparser.RobotFileParser()
     try:
-        resp = _session().get(origin + "/robots.txt", timeout=TIMEOUT, allow_redirects=True)
+        # Do not let a source site's robots redirect bypass the URL safety checks.
+        resp = _session().get(origin + "/robots.txt", timeout=TIMEOUT, allow_redirects=False)
         rp.parse(resp.text.splitlines() if resp.status_code == 200 else [])
     except requests.RequestException:
         rp.parse([])  # unreachable robots.txt = no rules published
@@ -88,3 +89,34 @@ def fetch(url: str, allowed_hosts: set[str], *, json_body=None) -> requests.Resp
         resp.raise_for_status()
         return resp
     raise Blocked(f"too many redirects: {url}")
+
+
+def verify_public_link(url: str) -> str:
+    """Confirm a public event/signup URL responds successfully, validating each redirect."""
+    for _ in range(MAX_REDIRECTS + 1):
+        parts = urlsplit(url)
+        if parts.username or parts.password or parts.port not in (None, 80, 443):
+            raise Blocked("credentials or unsupported port in event link")
+        host = (parts.hostname or "").lower()
+        if parts.scheme not in ("http", "https") or not host or not is_public(host):
+            raise Blocked("event link is not a public http(s) address")
+        origin = f"{parts.scheme}://{parts.netloc}"
+        if not _robots(origin).can_fetch(USER_AGENT, url):
+            raise Blocked(f"robots.txt disallows {url}")
+        wait = MIN_INTERVAL - (time.monotonic() - _last_hit.get(host, 0))
+        if wait > 0:
+            time.sleep(wait)
+        _last_hit[host] = time.monotonic()
+        # GET is intentional: signup portals often reject HEAD even when accessible.
+        # Streaming avoids downloading event assets or large pages.
+        with _session().get(url, timeout=TIMEOUT, allow_redirects=False, stream=True) as resp:
+            if resp.is_redirect:
+                location = resp.headers.get("Location")
+                if not location:
+                    raise Blocked("redirect has no destination")
+                url = urljoin(url, location)
+                continue
+            if not 200 <= resp.status_code < 300:
+                raise requests.HTTPError(f"event link returned HTTP {resp.status_code}")
+            return resp.url
+    raise Blocked("too many event-link redirects")

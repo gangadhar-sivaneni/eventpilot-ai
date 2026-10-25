@@ -46,8 +46,10 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
     .from("events")
     .select(EVENT_COLUMNS, { count: "exact" })
     .not("quality_verified_at", "is", null)
+    .not("registration_url", "is", null)
+    .gte("quality_verified_at", freshSince)
     .gte("last_checked_at", freshSince)
-    .or(`starts_at.gte.${nowIso},ends_at.gte.${nowIso}`)
+    .gt("starts_at", nowIso)
     .neq("registration_status", "closed")
     .order("first_seen_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
@@ -167,7 +169,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
             </ul>
           )}
 
-          {error && <Notice tone="bad">Could not load events. Check the Supabase keys in .env.local, then reload.</Notice>}
+          {error && <Notice tone="bad">Could not load events right now. Please refresh or try again in a moment.</Notice>}
           {!error && events.length === 0 && (
             <EmptyState icon={Radar} title="Nothing on the radar here yet">
               No open events match these filters. Try removing one, or check back after the next scan.

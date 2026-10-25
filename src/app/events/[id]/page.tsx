@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, Building2, CircleAlert, Clock, FileText, Tag, Trophy } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Building2, CircleAlert, Clock, FileText, ShieldCheck, Tag, Trophy } from "lucide-react";
 import { getUser } from "@/lib/auth";
 import { EVENT_COLUMNS, FORMAT_LABEL, safeOfficialUrl, safeRegistrationUrl, sourceName, type EventRow } from "@/lib/events";
 import { LocalTime } from "@/components/local-time";
@@ -16,8 +16,9 @@ async function load(id: string) {
   const nowIso = new Date().toISOString();
   const freshSince = new Date(Date.parse(nowIso) - 24 * 60 * 60 * 1000).toISOString();
   const { data } = await supabase.from("events").select(EVENT_COLUMNS)
-    .not("quality_verified_at", "is", null).gte("last_checked_at", freshSince)
-    .or(`starts_at.gte.${nowIso},ends_at.gte.${nowIso}`).eq("id", Number(id)).maybeSingle();
+    .not("quality_verified_at", "is", null).not("registration_url", "is", null)
+    .gte("quality_verified_at", freshSince).gte("last_checked_at", freshSince)
+    .gt("starts_at", nowIso).eq("id", Number(id)).maybeSingle();
   return data ? { e: data as EventRow, user, now: Date.now() } : null; // request time, read alongside the data
 }
 
@@ -48,8 +49,12 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
         <div className="rise flex flex-wrap items-center gap-2">
           <StatusPill status={e.registration_status} />
           <FeePill e={e} />
-          <span className="pill">{FORMAT_LABEL[e.format]}</span>
-          {e.prize_text && <span className="pill pill-flare"><Trophy aria-hidden="true" /> {e.prize_text}</span>}
+          {e.prize_text && (
+            <span className="pill pill-flare max-w-full overflow-hidden" title={e.prize_text}>
+              <Trophy className="shrink-0" aria-hidden="true" />
+              <span className="truncate">{e.prize_text}</span>
+            </span>
+          )}
         </div>
         <h1 className="rise mt-5 max-w-4xl text-4xl font-bold sm:text-5xl" style={{ "--i": 1 } as React.CSSProperties}>{e.title}</h1>
         <div className="rise mt-4 flex flex-wrap items-center gap-x-6 gap-y-2" style={{ "--i": 2 } as React.CSSProperties}>
@@ -135,7 +140,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
               )}
               {officialUrl && (
                 <a href={officialUrl} target="_blank" rel="noopener noreferrer" className="btn btn-ghost w-full">
-                  Official event page <ArrowUpRight aria-hidden="true" /><span className="sr-only">(opens in a new tab)</span>
+                  {regUrl === officialUrl ? "Event & registration page" : "Official event page"} <ArrowUpRight aria-hidden="true" /><span className="sr-only">(opens in a new tab)</span>
                 </a>
               )}
               {regUrl && regUrl !== officialUrl && (
@@ -144,9 +149,9 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                 </a>
               )}
             </div>
-            <p className="flex gap-2 border-t border-line pt-4 text-sm text-faint">
-              <CircleAlert className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
-              Confirm dates, fee and eligibility on the official page. The agent pauses on anything it cannot verify.
+            <p className="flex gap-2 border-t border-line pt-4 text-xs text-faint">
+              <ShieldCheck className="mt-0.5 h-4 w-4 flex-none text-ok" aria-hidden="true" />
+              Verified official listing. The agent auto-prepares your answers and requires your confirmation before submitting.
             </p>
           </div>
         </aside>
