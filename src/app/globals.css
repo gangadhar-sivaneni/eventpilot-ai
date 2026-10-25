@@ -71,27 +71,12 @@
 
 /* ─── Base ───────────────────────────────────────────────────────────────── */
 @layer base {
-  /* Hide visible scrollbar lines everywhere while preserving natural mouse wheel and touch scrolling */
-  *, *::before, *::after {
-    scrollbar-width: none !important;
-    -ms-overflow-style: none !important;
-  }
-  *::-webkit-scrollbar {
-    display: none !important;
-    width: 0 !important;
-    height: 0 !important;
-  }
-
   html {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
   }
   body {
     overflow-x: clip; /* the tilted marquee bleeds past the edges by design; clip, not hidden, keeps sticky working */
-    scrollbar-width: none;
-    -ms-overflow-style: none;
     background: var(--ink);
     color: var(--text);
     font-family: var(--font-sans);
@@ -291,3 +276,38 @@
   }
   .marquee { transform: none !important; }
 }
+
+/* ─── Global Scrollbar Suppression ───────────────────────────────────────────
+   Hides visible scroll tracks/bars completely while preserving full mouse wheel,
+   trackpad, and touch scrolling functionality. */
+*,
+*::before,
+*::after,
+html,
+body,
+dialog {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+*::-webkit-scrollbar,
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+dialog::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+.no-scrollbar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
