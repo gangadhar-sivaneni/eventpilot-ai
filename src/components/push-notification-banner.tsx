@@ -36,7 +36,10 @@ export function PushNotificationBanner() {
     // ONLY show if the user just logged in / signed up AND hasn't already dismissed it
     if (shouldPrompt && !isDismissed) {
       if ("Notification" in window && Notification.permission !== "denied") {
-        setIsOpen(true);
+        const timer = setTimeout(() => {
+          setIsOpen(true);
+        }, 200);
+        return () => clearTimeout(timer);
       }
     }
   }, []);

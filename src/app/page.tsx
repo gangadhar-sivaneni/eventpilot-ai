@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {
-  ArrowRight, ArrowUpRight, Ban, BellRing, CircleCheck, Download, FileText, Hand, Lock, Radar as RadarIcon,
+  ArrowRight, ArrowUpRight, BellRing, CircleCheck, Download, FileText, Hand, Lock, Radar as RadarIcon,
   ScanSearch, ShieldCheck, Trophy, UserRound, Wallet,
 } from "lucide-react";
 import { getUser } from "@/lib/auth";

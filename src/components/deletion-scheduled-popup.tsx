@@ -1,39 +1,36 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import React, { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Clock, ShieldAlert, X, LogIn } from "lucide-react";
 import Link from "next/link";
 
 export function DeletionScheduledPopup() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const [isOpen, setIsOpen] = useState(false);
-  const [dueDateString, setDueDateString] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState(false);
 
-  useEffect(() => {
-    if (searchParams.get("scheduled_delete") === "1") {
-      setIsOpen(true);
-      const dueParam = searchParams.get("due");
-      if (dueParam) {
-        try {
-          const d = new Date(dueParam);
-          setDueDateString(d.toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          }));
-        } catch {
-          setDueDateString(null);
-        }
-      }
+  const isScheduled = searchParams.get("scheduled_delete") === "1";
+  const isOpen = isScheduled && !dismissed;
+
+  const dueParam = searchParams.get("due");
+  const dueDateString = useMemo(() => {
+    if (!dueParam) return null;
+    try {
+      const d = new Date(dueParam);
+      return d.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return null;
     }
-  }, [searchParams]);
+  }, [dueParam]);
 
   function handleClose() {
-    setIsOpen(false);
+    setDismissed(true);
     // Remove query params cleanly from URL without reloading
     const url = new URL(window.location.href);
     url.searchParams.delete("scheduled_delete");

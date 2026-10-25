@@ -1,7 +1,7 @@
 // EventPilot Browser Web Push Service Worker
 // Handles background lock-screen notifications without needing any open browser tab or login.
 
-self.addEventListener("install", (event) => {
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
@@ -23,7 +23,7 @@ self.addEventListener("push", (event) => {
       const parsed = event.data.json();
       data = { ...data, ...parsed };
     }
-  } catch (e) {
+  } catch {
     if (event.data) {
       data.body = event.data.text();
     }

@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, Building2, CircleAlert, Clock, FileText, ShieldCheck, Tag, Trophy } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Building2, Clock, FileText, ShieldCheck, Tag, Trophy } from "lucide-react";
 import { getUser } from "@/lib/auth";
-import { EVENT_COLUMNS, FORMAT_LABEL, safeOfficialUrl, safeRegistrationUrl, sourceName, type EventRow } from "@/lib/events";
+import { EVENT_COLUMNS, safeOfficialUrl, safeRegistrationUrl, sourceName, type EventRow } from "@/lib/events";
 import { LocalTime } from "@/components/local-time";
 import { LoginButton } from "@/components/login-button";
 import { SubmitButton } from "@/components/submit-button";

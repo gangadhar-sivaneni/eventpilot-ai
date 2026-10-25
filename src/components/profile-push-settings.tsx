@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Bell, BellOff, BellRing, Check, Send, Sparkles } from "lucide-react";
+import { Bell, BellOff, BellRing, Send } from "lucide-react";
 export const PUSH_CATEGORIES = [
   { id: "all", label: "All Events" },
   { id: "ai", label: "AI & Machine Learning" },
@@ -35,26 +35,28 @@ export function ProfilePushSettings({ userId }: { userId?: string }) {
   const [categories, setCategories] = useState<string[]>(["all"]);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window) {
-      setSupported(true);
-      navigator.serviceWorker
-        .register("/sw.js", { scope: "/" })
-        .then((reg) => reg.pushManager.getSubscription())
-        .then((sub) => {
-          if (sub) {
-            setActive(true);
-            const savedCats = localStorage.getItem("push_user_categories");
-            if (savedCats) {
-              try {
-                setCategories(JSON.parse(savedCats));
-              } catch {
-                // ignore
-              }
+    if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      return;
+    }
+
+    navigator.serviceWorker
+      .register("/sw.js", { scope: "/" })
+      .then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => {
+        setSupported(true);
+        if (sub) {
+          setActive(true);
+          const savedCats = localStorage.getItem("push_user_categories");
+          if (savedCats) {
+            try {
+              setCategories(JSON.parse(savedCats));
+            } catch {
+              // ignore
             }
           }
-        })
-        .catch((e) => console.warn("SW error:", e));
-    }
+        }
+      })
+      .catch((e) => console.warn("SW error:", e));
   }, []);
 
   async function handleToggle() {
@@ -217,7 +219,7 @@ export function ProfilePushSettings({ userId }: { userId?: string }) {
       }
       setFeedback("✓ Test notification dispatched to your screen!");
       setTimeout(() => setFeedback(null), 3000);
-    } catch (err: unknown) {
+    } catch {
       setFeedback("Dispatched test notification to your screen.");
       setTimeout(() => setFeedback(null), 3000);
     } finally {
