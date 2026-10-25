@@ -168,6 +168,11 @@ export function AuthView({
     }
 
     setIsRedirecting(true);
+    try {
+      sessionStorage.setItem("show_post_login_push_prompt", "1");
+    } catch {
+      // ignore
+    }
     onSuccess?.();
     window.location.assign(cleanNext);
   }
@@ -343,6 +348,11 @@ export function AuthView({
 
     setBusy(false);
     setIsRedirecting(true);
+    try {
+      sessionStorage.setItem("show_post_login_push_prompt", "1");
+    } catch {
+      // ignore
+    }
     onSuccess?.();
     window.location.assign(cleanNext);
   }

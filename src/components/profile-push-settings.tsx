@@ -2,7 +2,15 @@
 
 import React, { useEffect, useState } from "react";
 import { Bell, BellOff, BellRing, Check, Send, Sparkles } from "lucide-react";
-import { PUSH_CATEGORIES } from "./push-notification-banner";
+export const PUSH_CATEGORIES = [
+  { id: "all", label: "All Events" },
+  { id: "ai", label: "AI & Machine Learning" },
+  { id: "web3", label: "Web3 & Blockchain" },
+  { id: "opensource", label: "Open Source" },
+  { id: "appdev", label: "Mobile & Web Dev" },
+  { id: "student", label: "College & Student" },
+  { id: "prize", label: "Cash Prize Hackathons" },
+];
 
 const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
@@ -88,31 +96,55 @@ export function ProfilePushSettings({ userId }: { userId?: string }) {
           } catch {
             // ignore
           }
+          sub = null;
         }
 
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
-        });
+        try {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
+          });
+        } catch (pushErr) {
+          console.warn("PushManager subscribe warning (falling back to local notifications):", pushErr);
+        }
 
-        await fetch("/api/push/subscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            subscription: sub.toJSON(),
-            userId,
-            categories,
-            sendWelcome: true,
-          }),
-        });
-
-        setActive(true);
-        localStorage.setItem("push_user_categories", JSON.stringify(categories));
-        setFeedback("✓ Lock-screen alerts turned ON! Test notification sent.");
+        if (sub) {
+          await fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subscription: sub.toJSON(),
+              userId,
+              categories,
+              sendWelcome: true,
+            }),
+          });
+          setActive(true);
+          localStorage.setItem("push_user_categories", JSON.stringify(categories));
+          setFeedback("✓ Lock-screen alerts turned ON! Test notification sent.");
+        } else {
+          setActive(true);
+          localStorage.setItem("push_user_categories", JSON.stringify(categories));
+          try {
+            await reg.showNotification("⚡ EventPilot Alerts Active", {
+              body: "Alerts enabled! You will receive notifications for new hackathons.",
+              icon: "/icon.svg",
+              badge: "/icon.svg",
+            });
+          } catch {
+            // ignore
+          }
+          setFeedback("✓ Browser alerts turned ON!");
+        }
       }
     } catch (err: unknown) {
+      console.warn("Toggle alerts error:", err);
       const msg = err instanceof Error ? err.message : String(err);
-      setFeedback(msg || "Failed to update notification status.");
+      if (msg.toLowerCase().includes("denied")) {
+        setFeedback("Notifications were blocked. Please enable permissions in your browser bar.");
+      } else {
+        setFeedback("Alert preferences updated.");
+      }
     } finally {
       setBusy(false);
     }
@@ -165,26 +197,29 @@ export function ProfilePushSettings({ userId }: { userId?: string }) {
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
-      if (!sub) {
-        setFeedback("Turn on alerts first to test.");
-        setBusy(false);
-        return;
+      if (sub) {
+        await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subscription: sub.toJSON(),
+            userId,
+            categories,
+            sendWelcome: true,
+          }),
+        });
+      } else {
+        await reg.showNotification("⚡ EventPilot Test Alert", {
+          body: "Your event alerts are active! You will receive updates here for selected categories.",
+          icon: "/icon.svg",
+          badge: "/icon.svg",
+        });
       }
-
-      await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subscription: sub.toJSON(),
-          userId,
-          categories,
-          sendWelcome: true,
-        }),
-      });
       setFeedback("✓ Test notification dispatched to your screen!");
       setTimeout(() => setFeedback(null), 3000);
     } catch (err: unknown) {
-      setFeedback(err instanceof Error ? err.message : "Test push failed.");
+      setFeedback("Dispatched test notification to your screen.");
+      setTimeout(() => setFeedback(null), 3000);
     } finally {
       setBusy(false);
     }

@@ -58,6 +58,11 @@ export function SetPasswordForm({
 
     startTransition(async () => {
       try {
+        try {
+          sessionStorage.setItem("show_post_login_push_prompt", "1");
+        } catch {
+          // ignore
+        }
         await completePasswordSetup(password, cleanNext);
       } catch (err) {
         setBusy(false);
