@@ -327,3 +327,32 @@ export async function sendPushToSubscription(sub: PushSubscriptionData, payload:
     jsonPayload
   );
 }
+
+export async function sendPushToUser(userId: string, payload: PushPayload) {
+  if (!userId) return { sent: 0, failed: 0, total: 0 };
+  const subscriptions = await getAllPushSubscriptions();
+  const userSubs = subscriptions.filter((s) => s.user_id === userId);
+
+  // If no subscription is explicitly tied to this userId yet, try all active subscriptions if there's only 1 (single user/tester)
+  const targets = userSubs.length > 0 ? userSubs : (subscriptions.length === 1 ? subscriptions : []);
+
+  if (targets.length === 0) {
+    return { sent: 0, failed: 0, total: 0 };
+  }
+
+  let sent = 0;
+  let failed = 0;
+  await Promise.allSettled(
+    targets.map(async (sub) => {
+      try {
+        await sendPushToSubscription(sub, payload);
+        sent++;
+      } catch (err) {
+        failed++;
+        console.warn("sendPushToUser error:", err);
+      }
+    })
+  );
+
+  return { sent, failed, total: targets.length };
+}

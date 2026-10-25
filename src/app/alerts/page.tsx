@@ -15,6 +15,8 @@ const TYPES: Record<string, [string, LucideIcon, string]> = {
   registration_opened: ["Registration opened", DoorOpen, "text-ok bg-ok/10 border-ok/25"],
   deadline_reminder: ["Closing soon", CalendarClock, "text-warn bg-warn/10 border-warn/25"],
   availability_changed: ["Status changed", RefreshCw, "text-sky bg-sky/10 border-sky/25"],
+  registration_started: ["Registration started", DoorOpen, "text-signal bg-signal/10 border-signal/25"],
+  registration_confirmed: ["Registration confirmed", CheckCheck, "text-ok bg-ok/10 border-ok/25"],
 };
 
 export default async function AlertsPage({ searchParams }: { searchParams: Promise<{ unread?: string }> }) {

@@ -15,6 +15,7 @@ import { Menu } from "@/components/menu";
 import { TabBar } from "@/components/tab-bar";
 import { DeletionScheduledPopup } from "@/components/deletion-scheduled-popup";
 import { PushNotificationBanner } from "@/components/push-notification-banner";
+import { PushSubscriptionSync } from "@/components/push-subscription-sync";
 import { OAuthCallbackForwarder } from "@/components/oauth-callback-forwarder";
 
 const display = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-bricolage", display: "swap" });
@@ -67,6 +68,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           <DeletionScheduledPopup />
         </Suspense>
         <OAuthCallbackForwarder />
+        <PushSubscriptionSync />
         <PushNotificationBanner />
         <header className="sticky top-0 z-40 border-b border-line bg-ink/85 backdrop-blur-xl">
           <nav className="shell flex h-16 items-center gap-3 md:gap-6" aria-label="Main">

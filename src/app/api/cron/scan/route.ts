@@ -137,26 +137,25 @@ export async function GET(req: NextRequest) {
 
     if (dbClient) {
       const nowIso = new Date().toISOString();
-      const lookbackWindow = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+      const broadcastLookback = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-      // Find recently active/verified events that are open for registration
-      const { data: freshEvents } = await dbClient
+      // Find top verified events that are open for registration
+      const { data: verifiedEvents } = await dbClient
         .from("events")
         .select("id, title, city, format, prize_text, categories, url, registration_status, first_seen_at, registration_deadline")
         .not("quality_verified_at", "is", null)
         .neq("registration_status", "closed")
-        .gte("first_seen_at", lookbackWindow)
         .order("first_seen_at", { ascending: false })
-        .limit(6);
+        .limit(25);
 
-      // Check which events have already been broadcast in audit_logs
+      // Check which events have already been broadcast in audit_logs over the past 7 days
       let alreadySentIds: string[] = [];
       if (admin) {
         const { data: history } = await admin
           .from("audit_logs")
           .select("details")
           .eq("action", "push_broadcast_sent")
-          .gte("created_at", lookbackWindow);
+          .gte("created_at", broadcastLookback);
         if (history) {
           alreadySentIds = history
             .map((h) => String((h.details as Record<string, unknown> | null)?.event_id ?? ""))
@@ -164,11 +163,12 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // If no new events in lookback window, check if any deadline is closing in < 24h
-      let eventsToNotify = (freshEvents || []).filter((e) => !alreadySentIds.includes(String(e.id)));
+      // Filter out events that were already broadcast
+      let eventsToNotify = (verifiedEvents || []).filter((e) => !alreadySentIds.includes(String(e.id)));
 
+      // If all recent verified events were already broadcast, check if any deadline is closing in < 48h
       if (eventsToNotify.length === 0) {
-        const closingWindow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        const closingWindow = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
         const { data: closingEvents } = await dbClient
           .from("events")
           .select("id, title, city, format, prize_text, categories, url, registration_status, first_seen_at, registration_deadline")
@@ -177,7 +177,7 @@ export async function GET(req: NextRequest) {
           .gte("registration_deadline", nowIso)
           .lte("registration_deadline", closingWindow)
           .order("registration_deadline", { ascending: true })
-          .limit(3);
+          .limit(10);
 
         if (closingEvents && closingEvents.length > 0) {
           eventsToNotify = closingEvents.filter((e) => !alreadySentIds.includes(`closing_${e.id}`));

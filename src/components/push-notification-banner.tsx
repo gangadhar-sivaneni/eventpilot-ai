@@ -27,18 +27,16 @@ export function PushNotificationBanner() {
     if (typeof window === "undefined") return;
 
     // Check if user was just authenticated (logged in or created account)
-    const shouldPrompt =
+    const isPostAuthPrompt =
       sessionStorage.getItem("show_post_login_push_prompt") === "1" ||
       new URLSearchParams(window.location.search).get("prompt_alerts") === "1";
 
-    const isDismissed = localStorage.getItem("push_modal_dismissed") === "true";
-
-    // ONLY show if the user just logged in / signed up AND hasn't already dismissed it
-    if (shouldPrompt && !isDismissed) {
-      if ("Notification" in window && Notification.permission !== "denied") {
+    if (isPostAuthPrompt) {
+      sessionStorage.removeItem("show_post_login_push_prompt");
+      if ("Notification" in window && Notification.permission === "default") {
         const timer = setTimeout(() => {
           setIsOpen(true);
-        }, 200);
+        }, 300);
         return () => clearTimeout(timer);
       }
     }
@@ -78,13 +76,27 @@ export function PushNotificationBanner() {
           try {
             sub = await reg.pushManager.getSubscription();
             if (!sub) {
-              sub = await reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
-              });
+              try {
+                sub = await reg.pushManager.subscribe({
+                  userVisibleOnly: true,
+                  applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
+                });
+              } catch (pushErr) {
+                console.warn("PushManager subscription initial error, attempting clean retry:", pushErr);
+                try {
+                  const ex = await reg.pushManager.getSubscription();
+                  if (ex) await ex.unsubscribe();
+                  sub = await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
+                  });
+                } catch (retryErr) {
+                  console.warn("PushManager subscription warning (using local notification):", retryErr);
+                }
+              }
             }
-          } catch (pushErr) {
-            console.warn("PushManager subscription warning (using local notification):", pushErr);
+          } catch (err) {
+            console.warn("PushManager getSubscription error:", err);
           }
         }
 

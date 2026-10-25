@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { MANUAL_KINDS, unresolved, type Proposed } from "@/lib/registrations";
+import { sendPushToUser } from "@/lib/push";
 
 const EDITABLE = ["not_started", "prepared", "awaiting_approval", "failed"];
 
@@ -74,7 +75,7 @@ export async function runPreparation(form: FormData) {
 }
 
 export async function runSubmission(form: FormData) {
-  const { supabase, reg } = await load(form);
+  const { supabase, reg, user } = await load(form);
   if (!reg.approved_at) throw new Error("Approval is required before submission");
   const unres = unresolved((reg.proposed_answers ?? []) as Proposed[]);
   if (unres.length > 0) throw new Error("All flagged fields must be resolved before submission");
@@ -92,6 +93,31 @@ export async function runSubmission(form: FormData) {
       error_summary: null,
     })
     .eq("id", reg.id);
+
+  const eventTitle = (reg.events as { title?: string } | null)?.title || "Hackathon";
+
+  // 1. In-app alert
+  try {
+    await supabase.from("event_alerts").insert({
+      user_id: user.id,
+      event_id: reg.event_id,
+      alert_type: "registration_confirmed",
+      message: `Registration Confirmed: ${eventTitle} (Ref #${refCode})`,
+    });
+  } catch (alertErr) {
+    console.warn("Failed to insert event_alert for runSubmission:", alertErr);
+  }
+
+  // 2. Lock-screen push notification
+  try {
+    await sendPushToUser(user.id, {
+      title: `🎉 Registration Confirmed: ${eventTitle}`,
+      body: `Confirmation Reference #${refCode}. Registration is confirmed!`,
+      url: "/registrations",
+    });
+  } catch (pushErr) {
+    console.warn("Failed to send push notification for runSubmission:", pushErr);
+  }
 
   refresh();
 }

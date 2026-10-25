@@ -47,13 +47,25 @@ export function ProfilePushSettings({ userId }: { userId?: string }) {
         if (sub) {
           setActive(true);
           const savedCats = localStorage.getItem("push_user_categories");
+          let cats = ["all"];
           if (savedCats) {
             try {
-              setCategories(JSON.parse(savedCats));
+              cats = JSON.parse(savedCats);
+              setCategories(cats);
             } catch {
               // ignore
             }
           }
+          fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subscription: sub.toJSON(),
+              userId,
+              categories: cats,
+              sendWelcome: false,
+            }),
+          }).catch(() => {});
         }
       })
       .catch((e) => console.warn("SW error:", e));
@@ -107,7 +119,17 @@ export function ProfilePushSettings({ userId }: { userId?: string }) {
             applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
           });
         } catch (pushErr) {
-          console.warn("PushManager subscribe warning (falling back to local notifications):", pushErr);
+          console.warn("PushManager subscribe initial error, attempting clean retry:", pushErr);
+          try {
+            const ex = await reg.pushManager.getSubscription();
+            if (ex) await ex.unsubscribe();
+            sub = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
+            });
+          } catch (retryErr) {
+            console.warn("PushManager subscribe retry warning (falling back to local notifications):", retryErr);
+          }
         }
 
         if (sub) {

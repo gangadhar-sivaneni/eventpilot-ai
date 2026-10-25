@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { savePushSubscription, removePushSubscription, sendPushToSubscription } from "@/lib/push";
 import { getUser } from "@/lib/auth";
 import { isValidPushEndpoint } from "@/lib/security";
+import { getAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
   try {
@@ -58,18 +60,43 @@ export async function POST(req: NextRequest) {
       user_id: authenticatedUserId,
     });
 
-    // Optionally send an immediate welcome push to confirm activation
+    // Optionally send an immediate welcome push to confirm activation with a real verified event
     if (sendWelcome) {
       try {
+        const admin = getAdminClient();
+        const dbClient = admin || (await createClient().catch(() => null));
+        let title = "⚡ EventPilot Alerts Active";
+        let body = "You will now receive instant lock-screen alerts for new hackathons, conferences & deadlines!";
+        let url = "/events";
+
+        if (dbClient) {
+          const { data: topEvent } = await dbClient
+            .from("events")
+            .select("id, title, city, format, prize_text")
+            .not("quality_verified_at", "is", null)
+            .neq("registration_status", "closed")
+            .order("first_seen_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (topEvent) {
+            const location = topEvent.city || (topEvent.format === "online" ? "Online" : "India");
+            const prizeInfo = topEvent.prize_text ? ` · Prize: ${topEvent.prize_text}` : "";
+            title = `⚡ Verified Hackathon: ${topEvent.title}`;
+            body = `${location}${prizeInfo} — Registration open now. Tap to view!`;
+            url = `/events/${topEvent.id}`;
+          }
+        }
+
         await sendPushToSubscription(
           {
             endpoint,
             keys: { p256dh: keys.p256dh, auth: keys.auth },
           },
           {
-            title: "⚡ EventPilot Alerts Active",
-            body: "You will now receive instant lock-screen alerts for new hackathons, conferences & deadlines!",
-            url: "/events",
+            title,
+            body,
+            url,
           }
         );
       } catch (pushErr) {

@@ -340,11 +340,50 @@ export function AuthView({
     }
 
     // Also update profile row with name if available
-    if (data.user?.id && fullName.trim()) {
-      await supabase
-        .from("profiles")
-        .update({ full_name: fullName.trim() })
-        .eq("user_id", data.user.id);
+    if (data.user?.id) {
+      if (fullName.trim()) {
+        await supabase
+          .from("profiles")
+          .update({ full_name: fullName.trim() })
+          .eq("user_id", data.user.id);
+      }
+
+      // Record welcome alert in user's in-app inbox
+      try {
+        await supabase.from("event_alerts").insert({
+          user_id: data.user.id,
+          alert_type: "new_event",
+          message: `Welcome to EventPilot, ${fullName.trim() || "hacker"}! Your account is active. Browse live verified hackathons and set your alert preferences.`,
+        });
+      } catch {
+        // ignore
+      }
+
+      // If browser push permission is already granted, sync device subscription immediately
+      if (
+        typeof window !== "undefined" &&
+        "Notification" in window &&
+        Notification.permission === "granted" &&
+        "serviceWorker" in navigator
+      ) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          if (sub) {
+            fetch("/api/push/subscribe", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                subscription: sub.toJSON(),
+                userId: data.user.id,
+                sendWelcome: true,
+              }),
+            }).catch(() => {});
+          }
+        } catch {
+          // ignore
+        }
+      }
     }
 
     setBusy(false);
