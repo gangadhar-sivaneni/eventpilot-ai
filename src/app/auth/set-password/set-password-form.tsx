@@ -12,6 +12,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { completePasswordSetup, signOut } from "@/app/actions";
+import { RadarLoader } from "@/components/radar-loader";
 
 interface SetPasswordFormProps {
   email: string;
@@ -63,6 +64,18 @@ export function SetPasswordForm({
         setError(err instanceof Error ? err.message : "Failed to set password. Please try again.");
       }
     });
+  }
+
+  if (busy) {
+    return (
+      <div className="py-8">
+        <RadarLoader
+          size="md"
+          label="Setting Up Your Password…"
+          sublabel="Securing your profile and loading your dashboard…"
+        />
+      </div>
+    );
   }
 
   return (

@@ -20,6 +20,7 @@ import { createClient } from "@/lib/supabase/client";
 import { DEMO } from "@/lib/demo-flag";
 import { demoSignIn, demoSignInGoogle } from "@/app/actions";
 import { GoogleMark } from "@/components/google-mark";
+import { RadarLoader } from "@/components/radar-loader";
 
 export type AuthMode = "login" | "signup";
 export type SignupStep = 1 | 2 | 3;
@@ -48,16 +49,10 @@ export function AuthView({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [otpLength, setOtpLength] = useState<6 | 8>(8);
+  const [otpLength] = useState(8);
   const [otp, setOtp] = useState<string[]>(Array(8).fill(""));
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-  function changeOtpLength(len: 6 | 8) {
-    setOtpLength(len);
-    setOtp(Array(len).fill(""));
-    setError(null);
-    setTimeout(() => otpInputRefs.current[0]?.focus(), 50);
-  }
 
   // UI state
   const [showPassword, setShowPassword] = useState(false);
@@ -151,9 +146,9 @@ export function AuthView({
       return;
     }
 
+    setIsRedirecting(true);
     onSuccess?.();
-    router.push(cleanNext);
-    router.refresh();
+    window.location.assign(cleanNext);
   }
 
   // Signup Step 1: Submit basic details & send OTP
@@ -226,17 +221,14 @@ export function AuthView({
 
   function handleOtpPaste(e: React.ClipboardEvent<HTMLInputElement>) {
     e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "");
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 8);
     if (!pasted) return;
-    const targetLen: 6 | 8 = pasted.length === 6 ? 6 : 8;
-    const chars = pasted.slice(0, targetLen);
-    setOtpLength(targetLen);
-    const newOtp = Array(targetLen).fill("");
-    for (let i = 0; i < chars.length; i++) {
-      newOtp[i] = chars[i];
+    const newOtp = Array(8).fill("");
+    for (let i = 0; i < pasted.length; i++) {
+      newOtp[i] = pasted[i];
     }
     setOtp(newOtp);
-    const targetIdx = Math.min(chars.length, targetLen - 1);
+    const targetIdx = Math.min(pasted.length, 7);
     otpInputRefs.current[targetIdx]?.focus();
   }
 
@@ -329,9 +321,9 @@ export function AuthView({
     }
 
     setBusy(false);
+    setIsRedirecting(true);
     onSuccess?.();
-    router.push(cleanNext);
-    router.refresh();
+    window.location.assign(cleanNext);
   }
 
   // Resend OTP handler
@@ -372,6 +364,18 @@ export function AuthView({
   const hasLetter = /[a-zA-Z]/.test(password);
   const hasNumberOrSymbol = /[\d\W]/.test(password);
   const passwordStrengthScore = [hasMinLength, hasLetter, hasNumberOrSymbol].filter(Boolean).length;
+
+  if (isRedirecting) {
+    return (
+      <div className="py-6 sm:py-8">
+        <RadarLoader
+          size="md"
+          label={mode === "signup" ? "Account Created!" : "Welcome back!"}
+          sublabel="Syncing session & opening your verified dashboard…"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">
@@ -667,21 +671,12 @@ export function AuthView({
               <div className="rounded-xl border border-line bg-raised/60 p-3 text-sm text-dim">
                 <p className="font-semibold text-text">Verify your email</p>
                 <p className="text-xs text-faint">
-                  Enter the {otpLength}-digit code sent to <strong className="text-text">{email}</strong>, or click the confirmation link in the email.
+                  Enter the 8-digit verification code sent to <strong className="text-text">{email}</strong>, or click the confirmation link in the email.
                 </p>
               </div>
 
               <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="field-label mb-0">{otpLength}-Digit Code</label>
-                  <button
-                    type="button"
-                    onClick={() => changeOtpLength(otpLength === 8 ? 6 : 8)}
-                    className="text-xs font-semibold text-accent hover:underline"
-                  >
-                    {otpLength === 8 ? "Got a 6-digit code?" : "Got an 8-digit code?"}
-                  </button>
-                </div>
+                <label className="field-label text-center mb-2.5">8-Digit Verification Code</label>
                 <div className="flex justify-center gap-1.5 sm:gap-2" onPaste={handleOtpPaste}>
                   {otp.map((digit, idx) => (
                     <input
@@ -696,11 +691,7 @@ export function AuthView({
                       value={digit}
                       onChange={(e) => handleOtpChange(idx, e.target.value)}
                       onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                      className={`${
-                        otpLength === 8
-                          ? "h-11 w-8 sm:h-12 sm:w-10 text-lg sm:text-xl"
-                          : "h-12 w-11 sm:h-13 sm:w-12 text-xl"
-                      } rounded-lg sm:rounded-xl border-2 border-line bg-surface text-center font-mono font-bold text-text transition-colors focus:border-text focus:outline-none focus:ring-2 focus:ring-signal`}
+                      className="h-11 w-8 sm:h-12 sm:w-10 rounded-lg sm:rounded-xl border-2 border-line bg-surface text-center font-mono text-lg sm:text-xl font-bold text-text transition-colors focus:border-text focus:outline-none focus:ring-2 focus:ring-signal"
                       disabled={busy}
                     />
                   ))}

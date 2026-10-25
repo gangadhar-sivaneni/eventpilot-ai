@@ -71,12 +71,27 @@
 
 /* ─── Base ───────────────────────────────────────────────────────────────── */
 @layer base {
+  /* Hide visible scrollbar lines everywhere while preserving natural mouse wheel and touch scrolling */
+  *, *::before, *::after {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  *::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
   html {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
   body {
     overflow-x: clip; /* the tilted marquee bleeds past the edges by design; clip, not hidden, keeps sticky working */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
     background: var(--ink);
     color: var(--text);
     font-family: var(--font-sans);

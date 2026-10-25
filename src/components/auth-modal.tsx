@@ -59,9 +59,10 @@ export function AuthModal({
         onClose();
       }}
       onClick={handleBackdropClick}
-      className="backdrop:bg-ink/75 backdrop:backdrop-blur-sm m-auto w-full max-w-md rounded-2xl border-2 border-text bg-surface p-0 text-text shadow-[12px_12px_0_var(--text)] transition-all open:animate-in open:fade-in-0 open:zoom-in-95"
+      className="backdrop:bg-ink/75 backdrop:backdrop-blur-sm m-auto w-full max-w-md max-h-[92vh] overflow-y-auto no-scrollbar rounded-2xl border-2 border-text bg-surface p-0 text-text shadow-[12px_12px_0_var(--text)] transition-all open:animate-in open:fade-in-0 open:zoom-in-95"
+      style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
     >
-      <div className="relative p-6 sm:p-8">
+      <div className="relative p-6 sm:p-8 no-scrollbar" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
         {/* Header bar with Logo and Close */}
         <div className="mb-4 flex items-center justify-between">
           <Logo />
