@@ -26,6 +26,29 @@ export async function getUser() {
 export async function requireUser() {
   const { supabase, user } = await getUser();
   if (!user) redirect("/login");
+
+  // Handle scheduled account deletion lifecycle
+  const deletionDueAt = (user.user_metadata as Record<string, unknown> | undefined)?.deletion_due_at as string | undefined;
+  if (deletionDueAt) {
+    const isDue = new Date(deletionDueAt).getTime() <= Date.now();
+    if (isDue) {
+      // 5-day grace period expired without user login
+      await supabase.rpc("delete_my_account");
+      await supabase.auth.signOut();
+      redirect("/?deleted=expired");
+    } else {
+      // User logged in within 5 days: automatically cancel the deletion request!
+      await supabase.auth.updateUser({
+        data: {
+          deletion_scheduled_at: null,
+          deletion_due_at: null,
+        },
+      });
+      const cookieStore = await cookies();
+      cookieStore.set("deletion_cancelled", "1", { path: "/", maxAge: 15 });
+    }
+  }
+
   const cookieStore = await cookies();
   if (cookieStore.get("needs_password")?.value === "1") {
     redirect("/auth/set-password");

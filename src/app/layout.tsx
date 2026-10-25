@@ -7,11 +7,13 @@ import "./globals.css";
 import { getUser } from "@/lib/auth";
 import { DEMO } from "@/lib/demo-flag";
 import { signOut } from "@/app/actions";
+import { Suspense } from "react";
 import { Logo } from "@/components/logo";
 import { NavLinks, type NavItem } from "@/components/nav-links";
 import { LoginButton } from "@/components/login-button";
 import { Menu } from "@/components/menu";
 import { TabBar } from "@/components/tab-bar";
+import { DeletionScheduledPopup } from "@/components/deletion-scheduled-popup";
 
 const display = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-bricolage", display: "swap" });
 const sans = Schibsted_Grotesk({ subsets: ["latin"], variable: "--font-schibsted", display: "swap" });
@@ -46,6 +48,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   ];
   const isAdmin = user?.app_metadata?.role === "admin";
   const name = (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? "";
+  const deletionCancelled = cookieStore.get("deletion_cancelled")?.value === "1";
 
   return (
     <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
@@ -53,6 +56,14 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-signal focus:px-4 focus:py-2 focus:text-signal-ink">
           Skip to content
         </a>
+        {deletionCancelled && (
+          <div className="bg-ok/10 border-b border-ok/30 py-2.5 px-4 text-center text-xs font-semibold text-ok flex items-center justify-center gap-2">
+            <span>✓ Welcome back! Your pending account deletion request has been automatically cancelled. Your account and all saved data remain active.</span>
+          </div>
+        )}
+        <Suspense fallback={null}>
+          <DeletionScheduledPopup />
+        </Suspense>
         <header className="sticky top-0 z-40 border-b border-line bg-ink/85 backdrop-blur-xl">
           <nav className="shell flex h-16 items-center gap-3 md:gap-6" aria-label="Main">
             <Logo />

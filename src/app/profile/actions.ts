@@ -63,11 +63,43 @@ export async function deleteSavedSearch(form: FormData) {
   back("saved=search");
 }
 
-export async function deleteAccount(form: FormData) {
-  const { supabase } = await requireUser();
-  if (form.get("confirm") !== "on") back(`error=${encodeURIComponent("Tick the confirmation box to delete your account")}`);
-  const { error } = await supabase.rpc("delete_my_account");
-  if (error) back(`error=${encodeURIComponent("Could not delete account")}`);
+export async function scheduleAccountDeletion(form: FormData) {
+  const { supabase, user } = await requireUser();
+  const password = String(form.get("password") ?? "").trim();
+  if (!password) {
+    back(`error=${encodeURIComponent("Password is required to request account deletion.")}`);
+  }
+
+  // Verify user password before scheduling deletion
+  const { error: authError } = await supabase.auth.signInWithPassword({
+    email: user.email!,
+    password,
+  });
+
+  if (authError) {
+    back(`error=${encodeURIComponent("Incorrect password. Please verify your credentials to continue.")}`);
+  }
+
+  // Schedule deletion 5 days into the future
+  const deletionDueAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+  const scheduledAt = new Date().toISOString();
+
+  const { error: updateError } = await supabase.auth.updateUser({
+    data: {
+      deletion_scheduled_at: scheduledAt,
+      deletion_due_at: deletionDueAt,
+    },
+  });
+
+  if (updateError) {
+    back(`error=${encodeURIComponent("Could not schedule account deletion. Please try again.")}`);
+  }
+
   await supabase.auth.signOut();
-  redirect("/?deleted=1");
+  redirect(`/?scheduled_delete=1&due=${encodeURIComponent(deletionDueAt)}`);
 }
+
+export async function deleteAccount(form: FormData) {
+  return scheduleAccountDeletion(form);
+}
+

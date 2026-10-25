@@ -68,12 +68,8 @@ export function SetPasswordForm({
 
   if (busy) {
     return (
-      <div className="py-8">
-        <RadarLoader
-          size="md"
-          label="Setting Up Your Password…"
-          sublabel="Securing your profile and loading your dashboard…"
-        />
+      <div className="flex items-center justify-center py-12">
+        <RadarLoader size="md" />
       </div>
     );
   }

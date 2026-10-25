@@ -5,7 +5,8 @@ import { requireUser } from "@/lib/auth";
 import { PROFILE_FIELDS, PROFILE_GROUPS } from "@/lib/profile";
 import { SubmitButton } from "@/components/submit-button";
 import { Notice, PageHeader } from "@/components/ui";
-import { deleteAccount, deleteAnswer, deleteSavedSearch, saveAnswer, savePreferences, saveProfile } from "./actions";
+import { DeleteAccountSection } from "@/components/delete-account-section";
+import { deleteAnswer, deleteSavedSearch, saveAnswer, savePreferences, saveProfile } from "./actions";
 
 export const metadata: Metadata = { title: "Profile" };
 
@@ -193,14 +194,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
                 <p className="mt-1 text-sm text-dim">Profile, answers, alerts and registrations as JSON.</p>
                 <a href="/profile/export" className="btn btn-ghost mt-4">Download JSON</a>
               </div>
-              <form action={deleteAccount} className="rounded-xl border border-bad/30 bg-bad/5 p-5">
-                <Trash2 className="h-5 w-5 text-bad" aria-hidden="true" />
-                <p className="mt-3 font-medium">Delete account</p>
-                <label className="mt-2 flex items-start gap-2 text-sm text-dim">
-                  <input type="checkbox" name="confirm" required className="check mt-0.5" /> I understand this permanently deletes my account and all my data.
-                </label>
-                <SubmitButton className="btn btn-danger mt-4" pendingText="Deleting…">Delete everything</SubmitButton>
-              </form>
+              <DeleteAccountSection />
             </div>
           </section>
         </div>

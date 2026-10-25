@@ -137,6 +137,27 @@ export function AuthView({
       return;
     }
 
+    // If user has a pending deletion request and logs in, cancel the delete request automatically!
+    const meta = (data.user?.user_metadata || {}) as Record<string, unknown>;
+    if (meta.deletion_scheduled_at || meta.deletion_due_at) {
+      const due = meta.deletion_due_at as string | undefined;
+      if (due && new Date(due).getTime() <= Date.now()) {
+        await supabase.rpc("delete_my_account");
+        await supabase.auth.signOut();
+        setBusy(false);
+        setError("Your account deletion grace period expired and the account has been deleted.");
+        return;
+      }
+      // Cancel deletion!
+      await supabase.auth.updateUser({
+        data: {
+          deletion_scheduled_at: null,
+          deletion_due_at: null,
+        },
+      });
+      document.cookie = "deletion_cancelled=1; path=/; max-age=15";
+    }
+
     // Check if user has set a password or needs mandatory setup
     const hasPassword = Boolean(data.user?.user_metadata?.has_password);
     setBusy(false);
@@ -367,12 +388,8 @@ export function AuthView({
 
   if (isRedirecting) {
     return (
-      <div className="py-6 sm:py-8">
-        <RadarLoader
-          size="md"
-          label={mode === "signup" ? "Account Created!" : "Welcome back!"}
-          sublabel="Syncing session & opening your verified dashboard…"
-        />
+      <div className="flex items-center justify-center py-12">
+        <RadarLoader size="md" />
       </div>
     );
   }
