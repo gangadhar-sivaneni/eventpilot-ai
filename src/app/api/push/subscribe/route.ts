@@ -3,7 +3,7 @@ import { savePushSubscription, removePushSubscription, sendPushToSubscription } 
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { subscription, userId, sendWelcome } = body;
 
     if (!subscription || !subscription.endpoint || !subscription.keys) {
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { endpoint } = body;
 
     if (!endpoint) {

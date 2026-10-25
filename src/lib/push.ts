@@ -29,7 +29,9 @@ const VAPID_SUBJECT =
 // Initialize web-push details
 webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = process.env.VERCEL
+  ? path.join("/tmp", "eventpilot_data")
+  : path.join(process.cwd(), "data");
 const SUBSCRIPTIONS_FILE = path.join(DATA_DIR, "push_subscriptions.json");
 
 function ensureStore(): PushSubscriptionData[] {
