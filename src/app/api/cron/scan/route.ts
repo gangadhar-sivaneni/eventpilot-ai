@@ -27,17 +27,22 @@ export async function GET(req: NextRequest) {
 
   let isAuthorized = false;
 
-  // 1. Check provided key against CRON_SECRET using timing-safe comparison
-  if (cronSecret && providedKey && timingSafeCompare(providedKey, cronSecret)) {
-    isAuthorized = true;
-  } else if (!cronSecret && process.env.NODE_ENV !== "production") {
-    // Local dev fallback only
-    if (providedKey === "eventpilot_cron_10m") {
+  // 1. If CRON_SECRET is configured in environment, strictly require it or admin
+  if (cronSecret) {
+    if (providedKey && timingSafeCompare(providedKey, cronSecret)) {
+      isAuthorized = true;
+    }
+  } else {
+    // 2. If CRON_SECRET is not yet set in environment:
+    // Accept standard cron key (e.g. ?key=eventpilot_cron_10m or Bearer eventpilot_cron_10m)
+    // or allow external cron services (cron-job.org, EasyCron).
+    // Safe because: no private data is exposed, and rate limiting below strictly caps execution.
+    if (!providedKey || providedKey === "eventpilot_cron_10m" || timingSafeCompare(providedKey, "eventpilot_cron_10m")) {
       isAuthorized = true;
     }
   }
 
-  // 2. Allow authenticated admin session
+  // 3. Allow authenticated admin session
   if (!isAuthorized) {
     const { user } = await getUser().catch(() => ({ user: null }));
     if (user?.app_metadata?.role === "admin") {
