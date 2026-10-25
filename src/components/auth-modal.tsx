@@ -15,7 +15,7 @@ interface AuthModalProps {
 export function AuthModal({
   isOpen,
   onClose,
-  next = "/events",
+  next = "/",
   defaultMode = "login",
 }: AuthModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);

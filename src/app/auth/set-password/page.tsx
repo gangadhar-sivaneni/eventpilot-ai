@@ -17,8 +17,8 @@ export default async function SetPasswordPage({
 }) {
   const { user } = await getUser();
   const params = await searchParams;
-  const next = params.next ?? "/events";
-  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/events";
+  const next = params.next ?? "/";
+  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/";
 
   if (!user) {
     redirect(`/login?next=${encodeURIComponent(safeNext)}`);

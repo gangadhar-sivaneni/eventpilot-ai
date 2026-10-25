@@ -34,7 +34,7 @@ interface AuthViewProps {
 }
 
 export function AuthView({
-  next = "/events",
+  next = "/",
   defaultMode = "login",
   onSuccess,
   title,
@@ -73,7 +73,7 @@ export function AuthView({
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
-  const cleanNext = sanitizeRedirectPath(next, "/events");
+  const cleanNext = sanitizeRedirectPath(next, "/");
 
   function switchMode(newMode: AuthMode) {
     setMode(newMode);

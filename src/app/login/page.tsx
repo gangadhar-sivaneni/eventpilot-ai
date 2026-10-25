@@ -18,7 +18,7 @@ export default async function LoginPage({
 }) {
   const { user } = await getUser();
   const params = await searchParams;
-  const safeNext = sanitizeRedirectPath(params.next, "/events");
+  const safeNext = sanitizeRedirectPath(params.next, "/");
 
   if (user) {
     if (!user.user_metadata?.has_password) {

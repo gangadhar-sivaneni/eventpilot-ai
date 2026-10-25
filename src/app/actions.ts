@@ -24,7 +24,7 @@ export async function demoSignIn(next: string) {
   store.delete("demo_out");
   store.delete("demo_no_pw");
   store.delete("needs_password");
-  redirect(next.startsWith("/") && !next.startsWith("//") ? next : "/events");
+  redirect(next.startsWith("/") && !next.startsWith("//") ? next : "/");
 }
 
 // Demo mode Google sign-in: sets demo_no_pw cookie so mandatory password flow is triggered
@@ -34,7 +34,7 @@ export async function demoSignInGoogle(next: string) {
   store.delete("demo_out");
   store.set("demo_no_pw", "1", { path: "/", httpOnly: true, sameSite: "lax" });
   store.set("needs_password", "1", { path: "/", httpOnly: true, sameSite: "lax" });
-  redirect(`/auth/set-password?next=${encodeURIComponent(next.startsWith("/") && !next.startsWith("//") ? next : "/events")}`);
+  redirect(`/auth/set-password?next=${encodeURIComponent(next.startsWith("/") && !next.startsWith("//") ? next : "/")}`);
 }
 
 // Demo mode set-password completion: clears demo_no_pw cookie
@@ -44,7 +44,7 @@ export async function demoSetPassword(next: string) {
   store.delete("demo_no_pw");
   store.delete("needs_password");
   store.delete("demo_out");
-  redirect(next.startsWith("/") && !next.startsWith("//") ? next : "/events");
+  redirect(next.startsWith("/") && !next.startsWith("//") ? next : "/");
 }
 
 // Server action to complete password setup and clear needs_password cookie
@@ -64,5 +64,5 @@ export async function completePasswordSetup(password: string, next: string) {
     }
   }
 
-  redirect(next.startsWith("/") && !next.startsWith("//") ? next : "/events");
+  redirect(next.startsWith("/") && !next.startsWith("//") ? next : "/");
 }

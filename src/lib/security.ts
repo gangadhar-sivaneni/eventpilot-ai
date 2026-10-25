@@ -5,7 +5,7 @@ import crypto from "node:crypto";
  * Prevents protocol-relative URLs (//evil.com), backslash tricks (/\\evil.com),
  * javascript: schemes, and CRLF injection.
  */
-export function sanitizeRedirectPath(path: string | null | undefined, fallback = "/events"): string {
+export function sanitizeRedirectPath(path: string | null | undefined, fallback = "/"): string {
   if (!path || typeof path !== "string") return fallback;
   const trimmed = path.trim();
 

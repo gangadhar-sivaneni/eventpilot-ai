@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const token_hash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
-  const safeNext = sanitizeRedirectPath(searchParams.get("next"), "/events");
+  const safeNext = sanitizeRedirectPath(searchParams.get("next"), "/");
   const demoGoogle = searchParams.get("demo_google");
 
   if (demoGoogle) {

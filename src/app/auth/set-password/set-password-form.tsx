@@ -24,7 +24,7 @@ interface SetPasswordFormProps {
 export function SetPasswordForm({
   email,
   fullName,
-  next = "/events",
+  next = "/",
 }: SetPasswordFormProps) {
   const [, startTransition] = useTransition();
 
@@ -35,7 +35,7 @@ export function SetPasswordForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const cleanNext = sanitizeRedirectPath(next, "/events");
+  const cleanNext = sanitizeRedirectPath(next, "/");
 
   const hasMinLength = password.length >= 8;
   const hasLetter = /[a-zA-Z]/.test(password);

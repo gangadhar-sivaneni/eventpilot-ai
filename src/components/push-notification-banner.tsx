@@ -148,7 +148,7 @@ export function PushNotificationBanner() {
 
         {/* Modal Header */}
         <div className="flex items-center gap-3">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-signal/15 text-signal border-2 border-signal/40">
+          <span className="grid h-12 w-12 shrink-0 aspect-square place-items-center rounded-2xl bg-signal/15 text-signal border-2 border-signal/40">
             <BellRing className="h-6 w-6 animate-bounce" />
           </span>
           <div>

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Bell, BellOff, BellRing, Send } from "lucide-react";
+import { Bell, BellOff, BellRing, Check, Send } from "lucide-react";
 export const PUSH_CATEGORIES = [
   { id: "all", label: "All Events" },
   { id: "ai", label: "AI & Machine Learning" },
@@ -228,28 +228,31 @@ export function ProfilePushSettings({ userId }: { userId?: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-line bg-raised p-5 space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className={`grid h-10 w-10 place-items-center rounded-xl border ${
-            active ? "bg-ok/10 text-ok border-ok/30" : "bg-faint/10 text-faint border-line"
-          }`}>
-            <BellRing className="h-5 w-5" />
-          </span>
-          <div>
-            <div className="flex items-center gap-2">
-              <h4 className="font-semibold text-text">Lock-Screen Push Alerts</h4>
-              <span className={`pill text-[10px] py-0 px-2 font-bold ${active ? "pill-ok" : ""}`}>
+    <div className="rounded-xl border border-line bg-raised p-4 sm:p-5 space-y-4">
+      {/* Top Header & Toggle Row */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+        <div className="flex items-start gap-3 min-w-0">
+          <div
+            className={`flex h-10 w-10 shrink-0 aspect-square items-center justify-center rounded-xl border transition-colors ${
+              active ? "bg-ok/10 text-ok border-ok/30" : "bg-faint/10 text-faint border-line"
+            }`}
+          >
+            <BellRing className="h-5 w-5 shrink-0" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="font-semibold text-text text-sm sm:text-base leading-snug">Lock-Screen Push Alerts</h4>
+              <span className={`pill text-[10px] py-0.5 px-2 font-bold ${active ? "pill-ok" : "pill-faint"}`}>
                 {active ? "Active" : "Disabled"}
               </span>
             </div>
-            <p className="text-xs text-dim">
+            <p className="text-xs text-dim mt-0.5 leading-relaxed">
               Receive instant alerts for hackathons &amp; deadlines even when the app is closed.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-start shrink-0 pt-0.5 sm:pt-0">
           {active && (
             <button
               type="button"
@@ -278,25 +281,49 @@ export function ProfilePushSettings({ userId }: { userId?: string }) {
 
       {/* Category selection */}
       <div className="pt-3 border-t border-line/60">
-        <p className="text-xs font-semibold text-text mb-2">
-          Categories to receive push notifications for:
-        </p>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex items-center justify-between mb-2.5">
+          <p className="text-xs font-semibold text-text">
+            Categories to receive push notifications for:
+          </p>
+          <span className="text-[11px] text-faint">
+            {categories.includes("all") ? "All categories selected" : `${categories.length} selected`}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {PUSH_CATEGORIES.map((cat) => {
             const isSelected = categories.includes(cat.id);
+            const isAll = cat.id === "all";
             return (
               <button
                 key={cat.id}
                 type="button"
                 onClick={() => updateCategory(cat.id)}
-                className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                className={`w-full text-left flex items-center justify-between px-3 py-2 rounded-lg border text-xs font-medium transition-all ${
+                  isAll ? "sm:col-span-2" : ""
+                } ${
                   isSelected
-                    ? "border-signal bg-signal/15 text-accent font-semibold shadow-sm"
+                    ? "border-signal bg-signal/15 text-accent font-semibold shadow-xs"
                     : "border-line bg-surface text-dim hover:text-text hover:border-line-strong"
                 }`}
               >
-                {isSelected && <span className="mr-1 text-signal font-bold">✓</span>}
-                {cat.label}
+                <span className="flex items-center gap-2 truncate">
+                  <span
+                    className={`flex h-4 w-4 shrink-0 aspect-square items-center justify-center rounded border text-[10px] ${
+                      isSelected
+                        ? "border-signal bg-signal text-signal-ink font-bold"
+                        : "border-line-strong bg-raised"
+                    }`}
+                  >
+                    {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
+                  </span>
+                  <span className="truncate">{cat.label}</span>
+                </span>
+                {isAll && (
+                  <span className="text-[10px] font-normal text-dim ml-2 hidden sm:inline">
+                    All notifications
+                  </span>
+                )}
               </button>
             );
           })}

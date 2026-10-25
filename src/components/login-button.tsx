@@ -16,7 +16,7 @@ interface LoginButtonProps {
 }
 
 export function LoginButton({
-  next = "/events",
+  next = "/",
   compact = false,
   label = "Log in",
   variant = "primary",

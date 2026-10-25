@@ -13,10 +13,34 @@ import { Notice, PlacePill, PrizePill, StatusPill } from "@/components/ui";
 const SOURCES = ["Devpost", "Unstop", "Devfolio", "Luma", "StudentTribe", "Major League Hacking", "HackerEarth", "Google Developer Groups"];
 
 const STEPS = [
-  { icon: ScanSearch, title: "Discover", text: "The agent checks event sources every 10 minutes and keeps event dates separate from registration deadlines." },
-  { icon: BellRing, title: "Match", text: "Your interests, cities and fee limit decide what reaches you, in-app and by email." },
-  { icon: FileText, title: "Prepare", text: "It reads the form and fills only what maps exactly to your profile. Everything else, it asks." },
-  { icon: Hand, title: "You approve", text: "Nothing is sent until you review it. Success is recorded only with a real confirmation." },
+  {
+    icon: ScanSearch,
+    title: "Discover",
+    desktopTitle: "Discover",
+    shortText: "Checks sources every 10m & verifies live deadlines.",
+    text: "The agent checks event sources every 10 minutes and keeps event dates separate from registration deadlines.",
+  },
+  {
+    icon: BellRing,
+    title: "Match",
+    desktopTitle: "Match",
+    shortText: "Filtered by your interests, cities, and fee preferences.",
+    text: "Your interests, cities and fee limit decide what reaches you, in-app and by email.",
+  },
+  {
+    icon: FileText,
+    title: "Prepare",
+    desktopTitle: "Prepare",
+    shortText: "Auto-fills profile data. Asks what it doesn't know.",
+    text: "It reads the form and fills only what maps exactly to your profile. Everything else, it asks.",
+  },
+  {
+    icon: Hand,
+    title: "Approve",
+    desktopTitle: "You approve",
+    shortText: "You review and approve. Nothing sent blindly.",
+    text: "Nothing is sent until you review it. Success is recorded only with a real confirmation.",
+  },
 ];
 
 const PROMISES = [
@@ -46,7 +70,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
   ]);
   const live = !all.error && (all.count ?? 0) > 0;
   const events = (picks.data ?? []) as EventRow[];
-  const safeNext = next?.startsWith("/") ? next : "/events";
+  const safeNext = next?.startsWith("/") ? next : "/";
 
   return (
     <>
@@ -54,24 +78,24 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
       <section className="relative overflow-hidden">
         <div className="grid-bg pointer-events-none absolute inset-0" aria-hidden="true" />
         <div className="pointer-events-none absolute -top-40 left-1/2 h-[36rem] w-[60rem] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(255_90_31/0.16),transparent)]" aria-hidden="true" />
-        <div className="shell relative grid items-center gap-14 pb-20 pt-14 md:pt-20 lg:grid-cols-[1.05fr_1fr]">
+        <div className="shell relative grid items-center gap-8 sm:gap-14 pb-12 sm:pb-16 md:pb-20 pt-4 sm:pt-10 md:pt-20 lg:grid-cols-[1.05fr_1fr]">
           <div>
-            {error && <div className="mb-6"><Notice tone="bad">Sign-in did not complete. Please try again.</Notice></div>}
-            {deleted && <div className="mb-6"><Notice tone="ok">Your account and all of its data were deleted.</Notice></div>}
-            <p className="rise inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-dim" style={{ "--i": 0 } as React.CSSProperties}>
+            {error && <div className="mb-4 sm:mb-6"><Notice tone="bad">Sign-in did not complete. Please try again.</Notice></div>}
+            {deleted && <div className="mb-4 sm:mb-6"><Notice tone="ok">Your account and all of its data were deleted.</Notice></div>}
+            <p className="rise inline-flex items-center gap-1.5 sm:gap-2 rounded-full border border-line bg-surface px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm text-dim" style={{ "--i": 0 } as React.CSSProperties}>
               <span className="ping relative h-2 w-2 rounded-full bg-signal" aria-hidden="true" />
-              Hyderabad & India tech events · online events included
+              Hyderabad &amp; India tech events · online included
             </p>
-            <h1 className="mt-6 text-[2.75rem] font-extrabold leading-[1.02] sm:text-6xl lg:text-[4.4rem]">
+            <h1 className="mt-3 sm:mt-6 text-3xl sm:text-5xl lg:text-[4.2rem] font-extrabold leading-[1.08] tracking-tight">
               <span className="rise block" style={{ "--i": 1 } as React.CSSProperties}>Find tech events</span>
               <span className="rise block" style={{ "--i": 2 } as React.CSSProperties}><span className="marker">first.</span></span>
               <span className="rise block" style={{ "--i": 3 } as React.CSSProperties}>Fill every form right.</span>
             </h1>
-            <p className="rise mt-6 max-w-xl text-lg text-dim" style={{ "--i": 4 } as React.CSSProperties}>
+            <p className="rise mt-3 sm:mt-6 max-w-xl text-sm sm:text-base md:text-lg text-dim leading-relaxed" style={{ "--i": 4 } as React.CSSProperties}>
               EventPilot is your autonomous radar for technology hackathons, conferences, and fests across India and worldwide.
               Every listing is verified in real time with live deadlines, prize pools, and instant form prep.
             </p>
-            <div className="rise mt-8 flex flex-wrap gap-3" style={{ "--i": 5 } as React.CSSProperties}>
+            <div className="rise mt-5 sm:mt-8 flex flex-wrap gap-2.5 sm:gap-3" style={{ "--i": 5 } as React.CSSProperties}>
               {user ? (
                 <Link href="/events" className="btn btn-primary">Open your events <ArrowRight aria-hidden="true" /></Link>
               ) : (
@@ -79,10 +103,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
               )}
               <Link href="/events?prize=1" className="btn btn-ghost"><Trophy aria-hidden="true" /> Prize-money events</Link>
             </div>
-            <ul className="rise mt-9 flex flex-wrap gap-x-6 gap-y-2 text-sm text-dim" style={{ "--i": 6 } as React.CSSProperties}>
-              <li className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-accent" aria-hidden="true" /> You approve every submission</li>
-              <li className="flex items-center gap-2"><CircleCheck className="h-4 w-4 text-accent" aria-hidden="true" /> 100% verified official links</li>
-              <li className="flex items-center gap-2"><Lock className="h-4 w-4 text-accent" aria-hidden="true" /> Encrypted & private data</li>
+            <ul className="rise mt-6 sm:mt-9 flex flex-wrap gap-x-5 gap-y-2 text-xs sm:text-sm text-dim" style={{ "--i": 6 } as React.CSSProperties}>
+              <li className="flex items-center gap-1.5 sm:gap-2"><ShieldCheck className="h-4 w-4 text-accent" aria-hidden="true" /> You approve every submission</li>
+              <li className="flex items-center gap-1.5 sm:gap-2"><CircleCheck className="h-4 w-4 text-accent" aria-hidden="true" /> 100% verified official links</li>
+              <li className="flex items-center gap-1.5 sm:gap-2"><Lock className="h-4 w-4 text-accent" aria-hidden="true" /> Encrypted &amp; private data</li>
             </ul>
           </div>
 
@@ -149,22 +173,22 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
       </section>
 
       {/* ─── How it works ─── */}
-      <section className="w-full px-5 sm:px-8 md:px-12 lg:px-16 xl:px-24 py-20 md:py-28" aria-labelledby="how">
+      <section className="w-full px-3.5 sm:px-8 md:px-12 lg:px-16 xl:px-24 py-12 sm:py-16 md:py-28" aria-labelledby="how">
         <p className="eyebrow">How it works</p>
-        <h2 id="how" className="mt-3 max-w-3xl text-4xl font-bold sm:text-5xl">From a listing to a confirmed seat, without the guesswork.</h2>
-        <ol className="relative mt-14 grid grid-cols-1 md:grid-cols-4 gap-8 w-full">
-          {STEPS.map(({ icon: Icon, title, text }, i) => (
+        <h2 id="how" className="mt-2 sm:mt-3 max-w-3xl text-2xl sm:text-4xl md:text-5xl font-bold">From a listing to a confirmed seat, without the guesswork.</h2>
+        <ol className="relative mt-8 sm:mt-14 grid grid-cols-4 gap-2 sm:gap-4 md:gap-8 w-full">
+          {STEPS.map(({ icon: Icon, title, desktopTitle, text, shortText }, i) => (
             <li key={title} className="reveal relative flex flex-col" style={{ "--i": i } as React.CSSProperties}>
               <div className="relative flex items-center">
-                <span className="relative z-10 grid h-14 w-14 shrink-0 place-items-center rounded-2xl border-2 border-text bg-surface text-text shadow-[4px_4px_0_var(--signal)]">
-                  <Icon className="h-6 w-6" aria-hidden="true" />
+                <span className="relative z-10 grid h-8 w-8 sm:h-11 sm:w-11 md:h-14 md:w-14 shrink-0 place-items-center rounded-xl sm:rounded-2xl border sm:border-2 border-text bg-surface text-text shadow-[2px_2px_0_var(--signal)] sm:shadow-[4px_4px_0_var(--signal)]">
+                  <Icon className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" aria-hidden="true" />
                 </span>
 
-                {/* Desktop horizontal line connecting to next step */}
+                {/* Horizontal line connecting to next step without breaking the chain */}
                 {i < STEPS.length - 1 && (
                   <span
                     aria-hidden="true"
-                    className="grow-x hidden md:block absolute left-12 -right-10 top-1/2 -translate-y-1/2 h-0.5 z-0 pointer-events-none"
+                    className="grow-x block absolute left-7 sm:left-10 md:left-12 -right-2 sm:-right-4 md:-right-8 top-1/2 -translate-y-1/2 h-0.5 z-0 pointer-events-none"
                     style={{
                       backgroundImage:
                         i === 0
@@ -178,9 +202,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
                 )}
               </div>
 
-              <p className="mt-5 font-mono text-xs text-faint">0{i + 1}</p>
-              <h3 className="mt-1 text-2xl font-semibold">{title}</h3>
-              <p className="mt-2 text-dim text-sm sm:text-base leading-relaxed">{text}</p>
+              <p className="mt-2.5 sm:mt-4 md:mt-5 font-mono text-[9px] sm:text-xs text-faint">0{i + 1}</p>
+              <h3 className="mt-0.5 sm:mt-1 text-xs sm:text-lg md:text-2xl font-bold tracking-tight">
+                <span className="md:hidden">{title}</span>
+                <span className="hidden md:inline">{desktopTitle ?? title}</span>
+              </h3>
+              <p className="mt-1 sm:mt-2 text-dim text-[10px] sm:text-xs md:text-sm leading-snug sm:leading-relaxed">
+                <span className="md:hidden">{shortText}</span>
+                <span className="hidden md:inline">{text}</span>
+              </p>
             </li>
           ))}
         </ol>
