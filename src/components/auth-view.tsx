@@ -21,6 +21,7 @@ import { DEMO } from "@/lib/demo-flag";
 import { demoSignIn, demoSignInGoogle } from "@/app/actions";
 import { GoogleMark } from "@/components/google-mark";
 import { RadarLoader } from "@/components/radar-loader";
+import { sanitizeRedirectPath } from "@/lib/security";
 
 export type AuthMode = "login" | "signup";
 export type SignupStep = 1 | 2 | 3;
@@ -72,7 +73,7 @@ export function AuthView({
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
-  const cleanNext = next.startsWith("/") && !next.startsWith("//") ? next : "/events";
+  const cleanNext = sanitizeRedirectPath(next, "/events");
 
   function switchMode(newMode: AuthMode) {
     setMode(newMode);

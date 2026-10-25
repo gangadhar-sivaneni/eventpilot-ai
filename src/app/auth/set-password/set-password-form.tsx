@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { completePasswordSetup, signOut } from "@/app/actions";
 import { RadarLoader } from "@/components/radar-loader";
+import { sanitizeRedirectPath } from "@/lib/security";
 
 interface SetPasswordFormProps {
   email: string;
@@ -34,7 +35,7 @@ export function SetPasswordForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const cleanNext = next.startsWith("/") && !next.startsWith("//") ? next : "/events";
+  const cleanNext = sanitizeRedirectPath(next, "/events");
 
   const hasMinLength = password.length >= 8;
   const hasLetter = /[a-zA-Z]/.test(password);

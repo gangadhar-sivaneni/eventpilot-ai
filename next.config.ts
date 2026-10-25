@@ -1,12 +1,42 @@
 import type { NextConfig } from "next";
 
-// Every page is per-user and reads the session cookie, so Cache Components
-// would only add <Suspense> ceremony here. Turn on when a page has cacheable public data.
+const securityHeaders = [
+  {
+    key: "X-Frame-Options",
+    value: "DENY",
+  },
+  {
+    key: "X-Content-Type-Options",
+    value: "nosniff",
+  },
+  {
+    key: "Referrer-Policy",
+    value: "strict-origin-when-cross-origin",
+  },
+  {
+    key: "Permissions-Policy",
+    value: "camera=(), microphone=(), geolocation=()",
+  },
+  {
+    key: "X-XSS-Protection",
+    value: "1; mode=block",
+  },
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=63072000; includeSubDomains; preload",
+  },
+];
+
 const nextConfig: NextConfig = {
-  // Hide the development-only route/status badge in the browser corner.
   devIndicators: false,
+  headers: async () => [
+    {
+      source: "/:path*",
+      headers: securityHeaders,
+    },
+  ],
   turbopack: {
-    root: process.cwd(), // a stray package-lock.json higher up the disk must not become the root
+    root: process.cwd(),
     rules: {
       "*.css": {
         loaders: ["@tailwindcss/turbopack"],

@@ -3,6 +3,7 @@ import webpush from "web-push";
 import fs from "node:fs";
 import path from "node:path";
 import { createClient } from "@/lib/supabase/server";
+import { isValidPushEndpoint } from "@/lib/security";
 
 export interface PushSubscriptionData {
   endpoint: string;
@@ -55,12 +56,15 @@ function ensureStore(): PushSubscriptionData[] {
   }
 }
 
+const MAX_SUBSCRIPTIONS = 5000;
+
 function saveStore(subs: PushSubscriptionData[]) {
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    fs.writeFileSync(SUBSCRIPTIONS_FILE, JSON.stringify(subs, null, 2), "utf8");
+    const bounded = subs.length > MAX_SUBSCRIPTIONS ? subs.slice(-MAX_SUBSCRIPTIONS) : subs;
+    fs.writeFileSync(SUBSCRIPTIONS_FILE, JSON.stringify(bounded, null, 2), "utf8");
   } catch (err) {
     console.error("Failed to write push subscriptions store:", err);
   }
@@ -188,6 +192,10 @@ export async function broadcastPushNotification(payload: PushPayload) {
 
   await Promise.allSettled(
     matching.map(async (sub) => {
+      if (!isValidPushEndpoint(sub.endpoint)) {
+        expiredEndpoints.push(sub.endpoint);
+        return;
+      }
       try {
         await webpush.sendNotification(
           {
@@ -216,6 +224,10 @@ export async function broadcastPushNotification(payload: PushPayload) {
 }
 
 export async function sendPushToSubscription(sub: PushSubscriptionData, payload: PushPayload) {
+  if (!isValidPushEndpoint(sub.endpoint)) {
+    throw new Error("Invalid push service endpoint");
+  }
+
   const jsonPayload = JSON.stringify({
     title: payload.title,
     body: payload.body,

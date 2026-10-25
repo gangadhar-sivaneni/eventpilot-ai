@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 import { type EmailOtpType } from "@supabase/supabase-js";
+import { sanitizeRedirectPath } from "@/lib/security";
 
 // Handles OAuth callbacks (?code=) and Email verification links (?token_hash= & type=)
 export async function GET(request: NextRequest) {
@@ -9,8 +10,7 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const token_hash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
-  const next = searchParams.get("next") ?? "/events";
-  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/events"; // no open redirects
+  const safeNext = sanitizeRedirectPath(searchParams.get("next"), "/events"); // strict open redirect defense
   const demoGoogle = searchParams.get("demo_google");
 
   if (demoGoogle) {

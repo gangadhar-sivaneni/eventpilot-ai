@@ -1,30 +1,67 @@
 import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { getUser } from "@/lib/auth";
+import { timingSafeCompare } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
+
+let lastScanTimestamp = 0;
+const MIN_SCAN_INTERVAL_MS = 60_000; // 60 seconds rate limit cooldown
 
 /**
  * 10-Minute Cron Trigger Endpoint
  *
  * Can be called by:
- * 1. External free cron services like cron-job.org or EasyCron every 10 minutes:
- *    GET https://your-domain.com/api/cron/scan?key=YOUR_CRON_KEY
- * 2. Vercel Cron or GitHub webhooks
- * 3. Local browser or test curl commands
+ * 1. Vercel Cron or GitHub webhooks with Authorization: Bearer <CRON_SECRET>
+ * 2. External cron services with ?key=<CRON_SECRET>
+ * 3. Authenticated Admin users
  */
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const authHeader = req.headers.get("authorization");
   const queryKey = url.searchParams.get("key");
 
-  const expectedKey = process.env.CRON_SECRET || "eventpilot_cron_10m";
+  const cronSecret = process.env.CRON_SECRET;
   const providedKey = queryKey || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
 
-  // If a CRON_SECRET is set, ensure it matches
-  if (process.env.CRON_SECRET && providedKey !== expectedKey) {
+  let isAuthorized = false;
+
+  // 1. Check provided key against CRON_SECRET using timing-safe comparison
+  if (cronSecret && providedKey && timingSafeCompare(providedKey, cronSecret)) {
+    isAuthorized = true;
+  } else if (!cronSecret && process.env.NODE_ENV !== "production") {
+    // Local dev fallback only
+    if (providedKey === "eventpilot_cron_10m") {
+      isAuthorized = true;
+    }
+  }
+
+  // 2. Allow authenticated admin session
+  if (!isAuthorized) {
+    const { user } = await getUser().catch(() => ({ user: null }));
+    if (user?.app_metadata?.role === "admin") {
+      isAuthorized = true;
+    }
+  }
+
+  if (!isAuthorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // Rate Limiting: Prevent rapid-fire resource exhaustion (DoS)
+  const now = Date.now();
+  if (now - lastScanTimestamp < MIN_SCAN_INTERVAL_MS) {
+    const waitSeconds = Math.ceil((MIN_SCAN_INTERVAL_MS - (now - lastScanTimestamp)) / 1000);
+    return NextResponse.json(
+      {
+        error: `Rate limited. Please wait ${waitSeconds}s before triggering another scan.`,
+        cooldown_remaining_seconds: waitSeconds,
+      },
+      { status: 429 }
+    );
+  }
+  lastScanTimestamp = now;
 
   const ghToken = process.env.GITHUB_DISPATCH_TOKEN || process.env.GITHUB_TOKEN;
   const repoOwner = process.env.GITHUB_REPO_OWNER || "gangadhar-sivaneni";
