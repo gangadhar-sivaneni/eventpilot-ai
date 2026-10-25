@@ -8,6 +8,16 @@ const PROTECTED = ["/profile", "/alerts", "/registrations", "/admin"];
 // away from private pages. This is an optimistic check; pages re-verify with requireUser().
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  const isCallbackPage = path.startsWith("/auth/callback");
+
+  // Intercept OAuth or PKCE code parameters landing on root "/" or other pages
+  // and forward them directly to the callback route handler so the session exchange executes!
+  if ((request.nextUrl.searchParams.has("code") || request.nextUrl.searchParams.has("token_hash")) && !isCallbackPage) {
+    const callbackUrl = request.nextUrl.clone();
+    callbackUrl.pathname = "/auth/callback";
+    return NextResponse.redirect(callbackUrl);
+  }
+
   const bounce = () => {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -16,7 +26,6 @@ export async function proxy(request: NextRequest) {
   };
   const isProtected = PROTECTED.some((p) => path.startsWith(p));
   const isSetPasswordPage = path.startsWith("/auth/set-password");
-  const isCallbackPage = path.startsWith("/auth/callback");
   const isLoginPage = path.startsWith("/login");
 
   if (DEMO) {

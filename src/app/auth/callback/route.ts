@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { sanitizeRedirectPath } from "@/lib/security";
 
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const token_hash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
-  const safeNext = sanitizeRedirectPath(searchParams.get("next"), "/events"); // strict open redirect defense
+  const safeNext = sanitizeRedirectPath(searchParams.get("next"), "/events");
   const demoGoogle = searchParams.get("demo_google");
 
   if (demoGoogle) {
@@ -20,22 +20,56 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
-  const supabase = await createClient();
+  const cookieStore = await cookies();
+
+  // Create initial redirect response object so cookies can be attached directly to it
+  const targetUrl = `${origin}${safeNext}`;
+  const response = NextResponse.redirect(targetUrl);
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+            response.cookies.set(name, value, options);
+          });
+        },
+      },
+    }
+  );
 
   // 1. Handle OAuth or PKCE code exchange
   if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
-      const { data } = await supabase.auth.getUser();
-      const hasPassword = Boolean(data.user?.user_metadata?.has_password);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error && data?.user) {
+      const hasPassword = Boolean(data.user.user_metadata?.has_password);
       if (!hasPassword) {
-        const res = NextResponse.redirect(`${origin}/auth/set-password?next=${encodeURIComponent(safeNext)}`);
-        res.cookies.set("needs_password", "1", { path: "/", httpOnly: true, sameSite: "lax" });
-        return res;
+        const pwResponse = NextResponse.redirect(
+          `${origin}/auth/set-password?next=${encodeURIComponent(safeNext)}`
+        );
+        // Transfer all authentication cookies to pwResponse
+        response.cookies.getAll().forEach((cookie) => {
+          pwResponse.cookies.set(cookie.name, cookie.value, cookie);
+        });
+        pwResponse.cookies.set("needs_password", "1", { path: "/", httpOnly: true, sameSite: "lax" });
+        return pwResponse;
       }
-      const res = NextResponse.redirect(`${origin}${safeNext}`);
-      res.cookies.delete("needs_password");
-      return res;
+
+      response.cookies.delete("needs_password");
+      return response;
+    }
+
+    if (error) {
+      console.error("Supabase OAuth exchangeCodeForSession error:", error);
+      return NextResponse.redirect(
+        `${origin}/login?error=${encodeURIComponent(error.message || "Could not complete Google sign in.")}`
+      );
     }
   }
 
@@ -44,21 +78,32 @@ export async function GET(request: NextRequest) {
   const resolvedType = (type ?? (searchParams.get("type") as EmailOtpType | null)) || "email";
 
   if (resolvedToken) {
-    const { error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.verifyOtp({
       type: resolvedType,
       token_hash: resolvedToken,
     });
-    if (!error) {
-      const { data } = await supabase.auth.getUser();
-      const hasPassword = Boolean(data.user?.user_metadata?.has_password);
+    if (!error && data?.user) {
+      const hasPassword = Boolean(data.user.user_metadata?.has_password);
       if (!hasPassword) {
-        const res = NextResponse.redirect(`${origin}/auth/set-password?next=${encodeURIComponent(safeNext)}`);
-        res.cookies.set("needs_password", "1", { path: "/", httpOnly: true, sameSite: "lax" });
-        return res;
+        const pwResponse = NextResponse.redirect(
+          `${origin}/auth/set-password?next=${encodeURIComponent(safeNext)}`
+        );
+        response.cookies.getAll().forEach((cookie) => {
+          pwResponse.cookies.set(cookie.name, cookie.value, cookie);
+        });
+        pwResponse.cookies.set("needs_password", "1", { path: "/", httpOnly: true, sameSite: "lax" });
+        return pwResponse;
       }
-      const res = NextResponse.redirect(`${origin}${safeNext}`);
-      res.cookies.delete("needs_password");
-      return res;
+
+      response.cookies.delete("needs_password");
+      return response;
+    }
+
+    if (error) {
+      console.error("Supabase verifyOtp error:", error);
+      return NextResponse.redirect(
+        `${origin}/login?error=${encodeURIComponent(error.message || "Invalid or expired link.")}`
+      );
     }
   }
 
@@ -111,5 +156,3 @@ export async function GET(request: NextRequest) {
     headers: { "Content-Type": "text/html; charset=utf-8" },
   });
 }
-
-
