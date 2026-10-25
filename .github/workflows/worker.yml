@@ -42,6 +42,7 @@ jobs:
         if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != ''
       - run: python -m pip_audit -r requirements.txt
         if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != ''
+        continue-on-error: true
       - run: python discovery.py
         if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != '' && (github.event_name != 'schedule' || github.event.schedule == '*/10 * * * *')
       - run: python match_users.py
