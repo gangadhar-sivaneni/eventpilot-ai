@@ -3,6 +3,7 @@ import webpush from "web-push";
 import fs from "node:fs";
 import path from "node:path";
 import { createClient } from "@/lib/supabase/server";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { isValidPushEndpoint } from "@/lib/security";
 
 export interface PushSubscriptionData {
@@ -78,18 +79,46 @@ export async function savePushSubscription(sub: PushSubscriptionData) {
     subs[existingIdx] = {
       ...subs[existingIdx],
       ...sub,
-      categories: sub.categories || subs[existingIdx].categories || [],
+      categories: sub.categories || subs[existingIdx].categories || ["all"],
     };
   } else {
     subs.push({
       ...sub,
-      categories: sub.categories || [],
+      categories: sub.categories || ["all"],
       created_at: new Date().toISOString(),
     });
   }
   saveStore(subs);
 
-  // 2. Try saving to Supabase if table exists
+  // 2. Persist to Supabase audit_logs (guarantees cross-container persistence on Vercel)
+  try {
+    const admin = getAdminClient();
+    if (admin) {
+      // Clean up previous subscription for same endpoint to avoid duplicates
+      await admin
+        .from("audit_logs")
+        .delete()
+        .eq("action", "push_subscription")
+        .filter("details->>endpoint", "eq", sub.endpoint);
+
+      await admin.from("audit_logs").insert({
+        user_id: sub.user_id || null,
+        action: "push_subscription",
+        details: {
+          endpoint: sub.endpoint,
+          keys: sub.keys,
+          categories: sub.categories && sub.categories.length > 0 ? sub.categories : ["all"],
+          user_id: sub.user_id || null,
+          active: true,
+          updated_at: new Date().toISOString(),
+        },
+      });
+    }
+  } catch (err) {
+    console.warn("Failed to save push subscription to Supabase audit_logs:", err);
+  }
+
+  // 3. Also try push_subscriptions table if present
   try {
     const supabase = await createClient();
     await supabase.from("push_subscriptions").upsert(
@@ -102,7 +131,7 @@ export async function savePushSubscription(sub: PushSubscriptionData) {
       { onConflict: "endpoint" }
     );
   } catch {
-    // Supabase fallback handled by persistent store
+    // Handled by audit_logs and local store
   }
 
   return { success: true };
@@ -112,6 +141,19 @@ export async function removePushSubscription(endpoint: string) {
   const subs = ensureStore();
   const filtered = subs.filter((s) => s.endpoint !== endpoint);
   saveStore(filtered);
+
+  try {
+    const admin = getAdminClient();
+    if (admin) {
+      await admin
+        .from("audit_logs")
+        .delete()
+        .eq("action", "push_subscription")
+        .filter("details->>endpoint", "eq", endpoint);
+    }
+  } catch (err) {
+    console.warn("Failed to remove push subscription from audit_logs:", err);
+  }
 
   try {
     const supabase = await createClient();
@@ -124,33 +166,74 @@ export async function removePushSubscription(endpoint: string) {
 }
 
 export async function getAllPushSubscriptions(): Promise<PushSubscriptionData[]> {
-  const localSubs = ensureStore();
+  const map = new Map<string, PushSubscriptionData>();
 
+  // 1. Load from local/tmp store
+  const localSubs = ensureStore();
+  for (const s of localSubs) {
+    if (s.endpoint && s.keys) map.set(s.endpoint, s);
+  }
+
+  // 2. Load from Supabase audit_logs (authoritative across all serverless instances)
+  try {
+    const admin = getAdminClient();
+    if (admin) {
+      const { data: rows } = await admin
+        .from("audit_logs")
+        .select("id, user_id, details, created_at")
+        .eq("action", "push_subscription")
+        .order("created_at", { ascending: false });
+
+      if (rows && rows.length > 0) {
+        for (const row of rows) {
+          const d = row.details as Record<string, unknown> | null;
+          if (d && typeof d.endpoint === "string" && d.keys && typeof d.keys === "object") {
+            const keysObj = d.keys as { p256dh?: string; auth?: string };
+            if (keysObj.p256dh && keysObj.auth && !map.has(d.endpoint)) {
+              map.set(d.endpoint, {
+                endpoint: d.endpoint,
+                keys: {
+                  p256dh: keysObj.p256dh,
+                  auth: keysObj.auth,
+                },
+                user_id: (row.user_id as string) || (d.user_id as string) || null,
+                categories: Array.isArray(d.categories) ? (d.categories as string[]) : ["all"],
+                created_at: row.created_at as string,
+              });
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to load push subscriptions from audit_logs:", err);
+  }
+
+  // 3. Fallback: try push_subscriptions table
   try {
     const supabase = await createClient();
     const { data } = await supabase.from("push_subscriptions").select("*");
     if (data && data.length > 0) {
-      const map = new Map<string, PushSubscriptionData>();
-      for (const s of localSubs) map.set(s.endpoint, s);
       for (const row of data) {
-        map.set(row.endpoint, {
-          endpoint: row.endpoint,
-          keys: {
-            p256dh: row.p256dh,
-            auth: row.auth,
-          },
-          user_id: row.user_id,
-          created_at: row.created_at,
-          categories: map.get(row.endpoint)?.categories || [],
-        });
+        if (!map.has(row.endpoint)) {
+          map.set(row.endpoint, {
+            endpoint: row.endpoint,
+            keys: {
+              p256dh: row.p256dh,
+              auth: row.auth,
+            },
+            user_id: row.user_id,
+            created_at: row.created_at,
+            categories: ["all"],
+          });
+        }
       }
-      return Array.from(map.values());
     }
   } catch {
-    // ignore
+    // Handled
   }
 
-  return localSubs;
+  return Array.from(map.values());
 }
 
 export interface PushPayload {

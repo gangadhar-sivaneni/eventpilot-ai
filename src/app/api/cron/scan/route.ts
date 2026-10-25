@@ -3,6 +3,9 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { getUser } from "@/lib/auth";
 import { timingSafeCompare } from "@/lib/security";
+import { broadcastPushNotification } from "@/lib/push";
+import { getAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +128,111 @@ export async function GET(req: NextRequest) {
     } catch (err: unknown) {
       results.local_worker_error = err instanceof Error ? err.message : String(err);
     }
+  }
+
+  // Dispatch lock-screen push notifications to active subscribers for newly discovered/verified events
+  try {
+    const admin = getAdminClient();
+    const dbClient = admin || (await createClient().catch(() => null));
+
+    if (dbClient) {
+      const nowIso = new Date().toISOString();
+      const lookbackWindow = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+
+      // Find recently active/verified events that are open for registration
+      const { data: freshEvents } = await dbClient
+        .from("events")
+        .select("id, title, city, format, prize_text, categories, url, registration_status, first_seen_at, registration_deadline")
+        .not("quality_verified_at", "is", null)
+        .neq("registration_status", "closed")
+        .gte("first_seen_at", lookbackWindow)
+        .order("first_seen_at", { ascending: false })
+        .limit(6);
+
+      // Check which events have already been broadcast in audit_logs
+      let alreadySentIds: string[] = [];
+      if (admin) {
+        const { data: history } = await admin
+          .from("audit_logs")
+          .select("details")
+          .eq("action", "push_broadcast_sent")
+          .gte("created_at", lookbackWindow);
+        if (history) {
+          alreadySentIds = history
+            .map((h) => String((h.details as Record<string, unknown> | null)?.event_id ?? ""))
+            .filter(Boolean);
+        }
+      }
+
+      // If no new events in lookback window, check if any deadline is closing in < 24h
+      let eventsToNotify = (freshEvents || []).filter((e) => !alreadySentIds.includes(String(e.id)));
+
+      if (eventsToNotify.length === 0) {
+        const closingWindow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        const { data: closingEvents } = await dbClient
+          .from("events")
+          .select("id, title, city, format, prize_text, categories, url, registration_status, first_seen_at, registration_deadline")
+          .not("quality_verified_at", "is", null)
+          .neq("registration_status", "closed")
+          .gte("registration_deadline", nowIso)
+          .lte("registration_deadline", closingWindow)
+          .order("registration_deadline", { ascending: true })
+          .limit(3);
+
+        if (closingEvents && closingEvents.length > 0) {
+          eventsToNotify = closingEvents.filter((e) => !alreadySentIds.includes(`closing_${e.id}`));
+        }
+      }
+
+      const broadcastResults: Array<Record<string, unknown>> = [];
+      // Broadcast at most 2 events per 10-minute scan to avoid spamming the user's notification drawer
+      for (const ev of eventsToNotify.slice(0, 2)) {
+        const isClosing = Boolean((ev as Record<string, unknown>).registration_deadline && !(ev as Record<string, unknown>).first_seen_at);
+        const category = (ev.categories && ev.categories[0]) ? String(ev.categories[0]).toLowerCase() : "all";
+        const location = ev.city || (ev.format === "online" ? "Online" : "India");
+        const prizeInfo = ev.prize_text ? ` · Prize: ${ev.prize_text}` : "";
+
+        const title = isClosing
+          ? `⏰ Closing Soon: ${ev.title}`
+          : `⚡ New Hackathon: ${ev.title}`;
+
+        const body = isClosing
+          ? `Registration closes in <24h (${location}${prizeInfo}). Review and secure your seat!`
+          : `${location}${prizeInfo} — Live registration now verified & open!`;
+
+        const pushStat = await broadcastPushNotification({
+          title,
+          body,
+          category,
+          url: `/events/${ev.id}`,
+        });
+
+        if (admin) {
+          await admin.from("audit_logs").insert({
+            action: "push_broadcast_sent",
+            details: {
+              event_id: isClosing ? `closing_${ev.id}` : ev.id,
+              event_title: ev.title,
+              stats: pushStat,
+            },
+          });
+        }
+
+        broadcastResults.push({
+          event_id: ev.id,
+          title: ev.title,
+          stats: pushStat,
+        });
+      }
+
+      results.push_broadcast = {
+        dispatched_count: broadcastResults.length,
+        items: broadcastResults,
+      };
+    }
+  } catch (err: unknown) {
+    console.warn("Push notification broadcast error during cron scan:", err);
+    results.push_broadcast_error = err instanceof Error ? err.message : String(err);
   }
 
   return NextResponse.json({
