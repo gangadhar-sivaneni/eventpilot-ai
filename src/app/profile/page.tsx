@@ -6,6 +6,7 @@ import { PROFILE_FIELDS, PROFILE_GROUPS } from "@/lib/profile";
 import { SubmitButton } from "@/components/submit-button";
 import { Notice, PageHeader } from "@/components/ui";
 import { DeleteAccountSection } from "@/components/delete-account-section";
+import { ProfilePushSettings } from "@/components/profile-push-settings";
 import { deleteAnswer, deleteSavedSearch, saveAnswer, savePreferences, saveProfile } from "./actions";
 
 export const metadata: Metadata = { title: "Profile" };
@@ -109,6 +110,11 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
           <section id="alerts" className="card scroll-mt-24 p-6 sm:p-8" aria-labelledby="h-alerts">
             <h2 id="h-alerts" className="text-2xl font-semibold">Interests &amp; alerts</h2>
             <p className="mt-1 text-sm text-faint">Leave a box empty to accept anything. Online events match every city.</p>
+
+            <div className="mt-6">
+              <ProfilePushSettings userId={user.id} />
+            </div>
+
             <form action={savePreferences} className="mt-6 space-y-6">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div><label htmlFor="categories" className="field-label">Categories</label>

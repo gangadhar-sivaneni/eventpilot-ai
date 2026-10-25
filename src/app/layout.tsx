@@ -65,7 +65,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <Suspense fallback={null}>
           <DeletionScheduledPopup />
         </Suspense>
-        <PushNotificationBanner variant="floating" />
+        <PushNotificationBanner />
         <header className="sticky top-0 z-40 border-b border-line bg-ink/85 backdrop-blur-xl">
           <nav className="shell flex h-16 items-center gap-3 md:gap-6" aria-label="Main">
             <Logo />

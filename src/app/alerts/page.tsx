@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { LocalTime } from "@/components/local-time";
 import { SubmitButton } from "@/components/submit-button";
 import { EmptyState, Notice, PageHeader } from "@/components/ui";
-import { PushNotificationBanner } from "@/components/push-notification-banner";
+import { ProfilePushSettings } from "@/components/profile-push-settings";
 import { markRead } from "./actions";
 
 export const metadata: Metadata = { title: "Alerts" };
@@ -51,7 +51,7 @@ export default async function AlertsPage({ searchParams }: { searchParams: Promi
       </PageHeader>
 
       <div className="mt-6">
-        <PushNotificationBanner variant="inline" />
+        <ProfilePushSettings />
       </div>
 
       <nav aria-label="Alert filter" className="mt-6 flex gap-2">

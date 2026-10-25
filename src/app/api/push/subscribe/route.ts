@@ -4,7 +4,7 @@ import { savePushSubscription, removePushSubscription, sendPushToSubscription } 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { subscription, userId, sendWelcome } = body;
+    const { subscription, userId, categories, sendWelcome } = body;
 
     if (!subscription || !subscription.endpoint || !subscription.keys) {
       return NextResponse.json({ error: "Invalid subscription payload" }, { status: 400 });
@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
       endpoint: subscription.endpoint,
       expirationTime: subscription.expirationTime,
       keys: subscription.keys,
+      categories: Array.isArray(categories) ? categories : [],
       user_id: userId || null,
     });
 

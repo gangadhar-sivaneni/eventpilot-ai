@@ -11,6 +11,7 @@ export interface PushSubscriptionData {
     p256dh: string;
     auth: string;
   };
+  categories?: string[];
   user_id?: string | null;
   created_at?: string;
 }
@@ -26,8 +27,11 @@ const VAPID_PRIVATE_KEY =
 const VAPID_SUBJECT =
   process.env.VAPID_SUBJECT || "mailto:notifications@eventpilot.ai";
 
-// Initialize web-push details
-webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+try {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+} catch (e) {
+  console.warn("Failed to set VAPID details:", e);
+}
 
 const DATA_DIR = process.env.VERCEL
   ? path.join("/tmp", "eventpilot_data")
@@ -63,13 +67,21 @@ function saveStore(subs: PushSubscriptionData[]) {
 }
 
 export async function savePushSubscription(sub: PushSubscriptionData) {
-  // 1. Save to local persistent file store
+  // 1. Save to local/tmp store
   const subs = ensureStore();
   const existingIdx = subs.findIndex((s) => s.endpoint === sub.endpoint);
   if (existingIdx >= 0) {
-    subs[existingIdx] = { ...subs[existingIdx], ...sub };
+    subs[existingIdx] = {
+      ...subs[existingIdx],
+      ...sub,
+      categories: sub.categories || subs[existingIdx].categories || [],
+    };
   } else {
-    subs.push({ ...sub, created_at: new Date().toISOString() });
+    subs.push({
+      ...sub,
+      categories: sub.categories || [],
+      created_at: new Date().toISOString(),
+    });
   }
   saveStore(subs);
 
@@ -86,7 +98,7 @@ export async function savePushSubscription(sub: PushSubscriptionData) {
       { onConflict: "endpoint" }
     );
   } catch {
-    // Optional Supabase persistence; local JSON handles it reliably
+    // Supabase fallback handled by persistent store
   }
 
   return { success: true };
@@ -114,7 +126,6 @@ export async function getAllPushSubscriptions(): Promise<PushSubscriptionData[]>
     const supabase = await createClient();
     const { data } = await supabase.from("push_subscriptions").select("*");
     if (data && data.length > 0) {
-      // Merge with local subscriptions by endpoint
       const map = new Map<string, PushSubscriptionData>();
       for (const s of localSubs) map.set(s.endpoint, s);
       for (const row of data) {
@@ -126,6 +137,7 @@ export async function getAllPushSubscriptions(): Promise<PushSubscriptionData[]>
           },
           user_id: row.user_id,
           created_at: row.created_at,
+          categories: map.get(row.endpoint)?.categories || [],
         });
       }
       return Array.from(map.values());
@@ -140,6 +152,7 @@ export async function getAllPushSubscriptions(): Promise<PushSubscriptionData[]>
 export interface PushPayload {
   title: string;
   body: string;
+  category?: string;
   url?: string;
   icon?: string;
   badge?: string;
@@ -150,6 +163,16 @@ export async function broadcastPushNotification(payload: PushPayload) {
   if (subscriptions.length === 0) {
     return { sent: 0, failed: 0, total: 0 };
   }
+
+  // Filter subscriptions based on requested category
+  const matching = subscriptions.filter((sub) => {
+    if (!payload.category) return true;
+    if (!sub.categories || sub.categories.length === 0) return true;
+    return (
+      sub.categories.includes(payload.category.toLowerCase()) ||
+      sub.categories.includes("all")
+    );
+  });
 
   const jsonPayload = JSON.stringify({
     title: payload.title,
@@ -164,7 +187,7 @@ export async function broadcastPushNotification(payload: PushPayload) {
   const expiredEndpoints: string[] = [];
 
   await Promise.allSettled(
-    subscriptions.map(async (sub) => {
+    matching.map(async (sub) => {
       try {
         await webpush.sendNotification(
           {
@@ -177,7 +200,6 @@ export async function broadcastPushNotification(payload: PushPayload) {
       } catch (err: unknown) {
         failed++;
         const statusCode = (err as { statusCode?: number })?.statusCode;
-        // 404 or 410 means subscription is expired or cancelled by user
         if (statusCode === 404 || statusCode === 410) {
           expiredEndpoints.push(sub.endpoint);
         }
@@ -185,13 +207,12 @@ export async function broadcastPushNotification(payload: PushPayload) {
     })
   );
 
-  // Clean up expired subscriptions
   if (expiredEndpoints.length > 0) {
     const subs = ensureStore().filter((s) => !expiredEndpoints.includes(s.endpoint));
     saveStore(subs);
   }
 
-  return { sent, failed, total: subscriptions.length };
+  return { sent, failed, total: matching.length };
 }
 
 export async function sendPushToSubscription(sub: PushSubscriptionData, payload: PushPayload) {
