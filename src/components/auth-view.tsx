@@ -48,8 +48,16 @@ export function AuthView({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [otpLength, setOtpLength] = useState<6 | 8>(8);
+  const [otp, setOtp] = useState<string[]>(Array(8).fill(""));
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  function changeOtpLength(len: 6 | 8) {
+    setOtpLength(len);
+    setOtp(Array(len).fill(""));
+    setError(null);
+    setTimeout(() => otpInputRefs.current[0]?.focus(), 50);
+  }
 
   // UI state
   const [showPassword, setShowPassword] = useState(false);
@@ -194,7 +202,7 @@ export function AuthView({
 
     setSignupStep(2);
     setResendCooldown(30);
-    setInfo(`A 6-digit verification code was sent to ${trimmedEmail}.`);
+    setInfo(`A verification code was sent to ${trimmedEmail}.`);
   }
 
   // Signup Step 2: Handle OTP input
@@ -205,7 +213,7 @@ export function AuthView({
     setOtp(newOtp);
 
     // Auto-advance to next input
-    if (char && index < 5) {
+    if (char && index < otpLength - 1) {
       otpInputRefs.current[index + 1]?.focus();
     }
   }
@@ -218,14 +226,17 @@ export function AuthView({
 
   function handleOtpPaste(e: React.ClipboardEvent<HTMLInputElement>) {
     e.preventDefault();
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "");
     if (!pasted) return;
-    const newOtp = [...otp];
-    for (let i = 0; i < 6; i++) {
-      newOtp[i] = pasted[i] || "";
+    const targetLen: 6 | 8 = pasted.length === 6 ? 6 : 8;
+    const chars = pasted.slice(0, targetLen);
+    setOtpLength(targetLen);
+    const newOtp = Array(targetLen).fill("");
+    for (let i = 0; i < chars.length; i++) {
+      newOtp[i] = chars[i];
     }
     setOtp(newOtp);
-    const targetIdx = Math.min(pasted.length, 5);
+    const targetIdx = Math.min(chars.length, targetLen - 1);
     otpInputRefs.current[targetIdx]?.focus();
   }
 
@@ -236,8 +247,8 @@ export function AuthView({
     setInfo(null);
 
     const token = otp.join("").trim();
-    if (token.length !== 6) {
-      setError("Please enter the full 6-digit verification code.");
+    if (token.length !== otpLength) {
+      setError(`Please enter the full ${otpLength}-digit verification code.`);
       return;
     }
 
@@ -605,7 +616,7 @@ export function AuthView({
                   />
                 </div>
                 <p className="mt-1 text-xs text-faint">
-                  We will send a 6-digit OTP code to verify this email address.
+                  We will send a verification code to verify this email address.
                 </p>
               </div>
 
@@ -656,13 +667,22 @@ export function AuthView({
               <div className="rounded-xl border border-line bg-raised/60 p-3 text-sm text-dim">
                 <p className="font-semibold text-text">Verify your email</p>
                 <p className="text-xs text-faint">
-                  Enter the 6-digit code sent to <strong className="text-text">{email}</strong>, or click the confirmation link in the email.
+                  Enter the {otpLength}-digit code sent to <strong className="text-text">{email}</strong>, or click the confirmation link in the email.
                 </p>
               </div>
 
               <div>
-                <label className="field-label text-center">6-Digit Code</label>
-                <div className="flex justify-center gap-2 sm:gap-2.5" onPaste={handleOtpPaste}>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="field-label mb-0">{otpLength}-Digit Code</label>
+                  <button
+                    type="button"
+                    onClick={() => changeOtpLength(otpLength === 8 ? 6 : 8)}
+                    className="text-xs font-semibold text-accent hover:underline"
+                  >
+                    {otpLength === 8 ? "Got a 6-digit code?" : "Got an 8-digit code?"}
+                  </button>
+                </div>
+                <div className="flex justify-center gap-1.5 sm:gap-2" onPaste={handleOtpPaste}>
                   {otp.map((digit, idx) => (
                     <input
                       key={idx}
@@ -676,7 +696,11 @@ export function AuthView({
                       value={digit}
                       onChange={(e) => handleOtpChange(idx, e.target.value)}
                       onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                      className="h-12 w-11 rounded-xl border-2 border-line bg-surface text-center font-mono text-xl font-bold text-text transition-colors focus:border-text focus:outline-none focus:ring-2 focus:ring-signal sm:h-13 sm:w-12"
+                      className={`${
+                        otpLength === 8
+                          ? "h-11 w-8 sm:h-12 sm:w-10 text-lg sm:text-xl"
+                          : "h-12 w-11 sm:h-13 sm:w-12 text-xl"
+                      } rounded-lg sm:rounded-xl border-2 border-line bg-surface text-center font-mono font-bold text-text transition-colors focus:border-text focus:outline-none focus:ring-2 focus:ring-signal`}
                       disabled={busy}
                     />
                   ))}
@@ -685,7 +709,7 @@ export function AuthView({
 
               <button
                 type="submit"
-                disabled={busy || otp.join("").length !== 6}
+                disabled={busy || otp.join("").length !== otpLength}
                 className="btn btn-primary w-full shadow-sm"
               >
                 {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
@@ -697,7 +721,7 @@ export function AuthView({
                   type="button"
                   onClick={() => {
                     setSignupStep(1);
-                    setOtp(["", "", "", "", "", ""]);
+                    setOtp(Array(otpLength).fill(""));
                     setError(null);
                   }}
                   className="flex items-center gap-1 text-faint hover:text-text"
