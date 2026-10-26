@@ -107,6 +107,7 @@ export function PushNotificationBanner() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               subscription: sub.toJSON(),
+              categories: ["all"],
               sendWelcome: true,
             }),
           }).catch((err) => console.warn("Server subscription sync error:", err));
@@ -115,8 +116,8 @@ export function PushNotificationBanner() {
           try {
             await reg.showNotification("⚡ EventPilot Alerts Active", {
               body: "You will now receive notifications for new hackathons and deadlines!",
-              icon: "/icon.svg",
-              badge: "/icon.svg",
+              icon: "/icon-192.png",
+              badge: "/badge.png",
             });
           } catch {
             // ignore

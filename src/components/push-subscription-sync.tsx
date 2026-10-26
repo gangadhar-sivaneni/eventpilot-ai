@@ -22,7 +22,7 @@ function urlB64ToUint8Array(base64String: string) {
  * Runs in RootLayout so whenever a user visits the app, their device's push channel is
  * actively registered in the database, ensuring background lock-screen notifications work.
  */
-export function PushSubscriptionSync() {
+export function PushSubscriptionSync({ userId }: { userId?: string }) {
   useEffect(() => {
     if (
       typeof window === "undefined" ||
@@ -90,6 +90,7 @@ export function PushSubscriptionSync() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               subscription: sub.toJSON(),
+              userId,
               categories,
               sendWelcome: false,
             }),

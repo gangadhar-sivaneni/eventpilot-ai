@@ -38,16 +38,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid key format" }, { status: 400 });
     }
 
-    // 3. IDOR / Spoofing Defense: obtain user ID from authenticated session only
+    // 3. Obtain user ID from authenticated session with validated fallback
     const { user } = await getUser().catch(() => ({ user: null }));
     const authenticatedUserId = user?.id || null;
+    const bodyUserId = typeof body.userId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.userId)
+      ? body.userId
+      : null;
+    const effectiveUserId = authenticatedUserId || bodyUserId || null;
 
-    // 4. Sanitize categories
-    const safeCategories = Array.isArray(categories)
-      ? categories
-          .filter((c): c is string => typeof c === "string" && c.length <= 50)
-          .slice(0, 10)
-      : [];
+    // 4. Sanitize categories (defaults to 'all' if not specified)
+    const rawCategories = Array.isArray(categories) && categories.length > 0 ? categories : ["all"];
+    const safeCategories = rawCategories
+      .filter((c): c is string => typeof c === "string" && c.length <= 50)
+      .slice(0, 10);
+    const finalCategories = safeCategories.length > 0 ? safeCategories : ["all"];
 
     await savePushSubscription({
       endpoint,
@@ -56,8 +60,8 @@ export async function POST(req: NextRequest) {
         p256dh: keys.p256dh,
         auth: keys.auth,
       },
-      categories: safeCategories,
-      user_id: authenticatedUserId,
+      categories: finalCategories,
+      user_id: effectiveUserId,
     });
 
     // Optionally send an immediate welcome push to confirm activation with a real verified event
@@ -97,6 +101,8 @@ export async function POST(req: NextRequest) {
             title,
             body,
             url,
+            icon: "/icon-192.png",
+            badge: "/badge.png",
           }
         );
       } catch (pushErr) {

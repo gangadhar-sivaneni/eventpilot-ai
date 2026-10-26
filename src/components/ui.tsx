@@ -8,12 +8,12 @@ const STATUS: Record<EventRow["registration_status"], [string, string]> = {
   unknown: ["Status unknown", ""],
 };
 
-export function StatusPill({ status }: { status: EventRow["registration_status"] }) {
+export function StatusPill({ status, compact }: { status: EventRow["registration_status"]; compact?: boolean }) {
   const [label, tone] = STATUS[status];
   return (
-    <span className={`pill ${tone}`}>
-      {status === "open" && <span className="ping relative h-1.5 w-1.5 rounded-full bg-ok" aria-hidden="true" />}
-      {label}
+    <span className={`pill ${tone} ${compact ? "!h-5 !px-1.5 !text-[0.68rem] sm:!h-6 sm:!px-2 sm:!text-xs gap-1" : ""}`.trim()}>
+      {status === "open" && <span className="ping relative h-1.5 w-1.5 rounded-full bg-ok flex-none" aria-hidden="true" />}
+      <span className="truncate">{label}</span>
     </span>
   );
 }
@@ -41,27 +41,31 @@ export function formatPrizeShort(prize: string): string {
   return p;
 }
 
-export function PrizePill({ prize, className = "" }: { prize: string | null; className?: string }) {
+export function PrizePill({ prize, className = "", compact }: { prize: string | null; className?: string; compact?: boolean }) {
   if (!prize) return null;
   const short = formatPrizeShort(prize);
   return (
     <span
-      className={`pill pill-flare max-w-[5.25rem] sm:max-w-[6.25rem] shrink-0 justify-center overflow-hidden ${className}`.trim()}
+      className={`pill pill-flare shrink-0 justify-center overflow-hidden ${
+        compact
+          ? "!h-5 !px-1.5 !text-[0.68rem] sm:!h-6 sm:!px-2 sm:!text-xs max-w-[5.75rem] sm:max-w-[7.5rem] gap-1"
+          : "max-w-[5.75rem] sm:max-w-[7.5rem]"
+      } ${className}`.trim()}
       title={prize}
     >
-      <Trophy className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <Trophy className={`${compact ? "h-3 w-3 sm:h-3.5 sm:w-3.5" : "h-3.5 w-3.5"} shrink-0`} aria-hidden="true" />
       <span className="truncate min-w-0">{short}</span>
     </span>
   );
 }
 
-export function PlacePill({ e }: { e: Pick<EventRow, "city" | "country" | "format"> }) {
+export function PlacePill({ e, compact }: { e: Pick<EventRow, "city" | "country" | "format">; compact?: boolean }) {
   const where = [e.city, e.country].filter(Boolean).join(", ");
   const online = e.format === "online";
   const Icon = online ? Globe : MapPin;
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 text-sm text-dim">
-      <Icon className="h-4 w-4 flex-none text-faint" aria-hidden="true" />
+    <span className={`inline-flex min-w-0 items-center ${compact ? "gap-1 text-[0.72rem] sm:text-xs md:text-sm text-dim" : "gap-1.5 text-sm text-dim"}`}>
+      <Icon className={`${compact ? "h-3 w-3 sm:h-3.5 sm:w-3.5" : "h-4 w-4"} flex-none text-faint`} aria-hidden="true" />
       <span className="truncate">{online ? "Online" : where || (e.format === "hybrid" ? "Hybrid" : "Location TBA")}</span>
     </span>
   );

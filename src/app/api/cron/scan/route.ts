@@ -116,14 +116,23 @@ export async function GET(req: NextRequest) {
         : path.join(workerDir, ".venv", "bin", "python");
 
       const scriptPath = path.join(workerDir, "discovery.py");
+      const matchScriptPath = path.join(workerDir, "match_users.py");
 
       const child = spawn(pythonExe, [scriptPath], {
         cwd: workerDir,
         detached: true,
         stdio: "ignore",
       });
-
       child.unref();
+
+      // Also trigger user preference matching so newly discovered events queue in-app alerts
+      const matchChild = spawn(pythonExe, [matchScriptPath], {
+        cwd: workerDir,
+        detached: true,
+        stdio: "ignore",
+      });
+      matchChild.unref();
+
       results.local_worker = "spawned_detached";
     } catch (err: unknown) {
       results.local_worker_error = err instanceof Error ? err.message : String(err);
@@ -148,7 +157,7 @@ export async function GET(req: NextRequest) {
         .order("first_seen_at", { ascending: false })
         .limit(25);
 
-      // Check which events have already been broadcast in audit_logs over the past 7 days
+      // Check which events have actually been successfully broadcast in audit_logs over the past 7 days
       let alreadySentIds: string[] = [];
       if (admin) {
         const { data: history } = await admin
@@ -158,6 +167,12 @@ export async function GET(req: NextRequest) {
           .gte("created_at", broadcastLookback);
         if (history) {
           alreadySentIds = history
+            .filter((h) => {
+              const d = h.details as Record<string, unknown> | null;
+              const stats = d?.stats as { sent?: number } | null;
+              // Only consider an event already broadcast if at least 1 notification was successfully delivered
+              return (stats?.sent ?? 0) > 0;
+            })
             .map((h) => String((h.details as Record<string, unknown> | null)?.event_id ?? ""))
             .filter(Boolean);
         }
@@ -207,7 +222,8 @@ export async function GET(req: NextRequest) {
           url: `/events/${ev.id}`,
         });
 
-        if (admin) {
+        // Only mark event as broadcast sent if at least 1 notification was actually delivered
+        if (admin && pushStat.sent > 0) {
           await admin.from("audit_logs").insert({
             action: "push_broadcast_sent",
             details: {

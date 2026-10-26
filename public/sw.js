@@ -14,8 +14,8 @@ self.addEventListener("push", (event) => {
     title: "EventPilot Alert",
     body: "New verified hackathon discovered!",
     url: "/events",
-    icon: "/icon.svg",
-    badge: "/icon.svg",
+    icon: "/icon-192.png",
+    badge: "/badge.png",
   };
 
   try {
@@ -29,11 +29,17 @@ self.addEventListener("push", (event) => {
     }
   }
 
+  // Ensure raster PNG format for desktop & mobile OS notification system compatibility
+  const iconUrl = (data.icon && !data.icon.endsWith(".svg")) ? data.icon : "/icon-192.png";
+  const badgeUrl = (data.badge && !data.badge.endsWith(".svg")) ? data.badge : "/badge.png";
+
   const options = {
     body: data.body,
-    icon: data.icon || "/icon.svg",
-    badge: data.badge || "/icon.svg",
+    icon: iconUrl,
+    badge: badgeUrl,
     vibrate: [100, 50, 100],
+    tag: data.url ? `eventpilot_${data.url}` : "eventpilot_alert",
+    renotify: true,
     data: {
       url: data.url || "/events",
       dateOfArrival: Date.now(),
@@ -44,7 +50,15 @@ self.addEventListener("push", (event) => {
     ],
   };
 
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  event.waitUntil(
+    self.registration.showNotification(data.title, options).catch((err) => {
+      console.warn("ServiceWorker showNotification failed with options, attempting minimal fallback:", err);
+      return self.registration.showNotification(data.title, {
+        body: data.body,
+        icon: "/icon-192.png",
+      });
+    })
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {

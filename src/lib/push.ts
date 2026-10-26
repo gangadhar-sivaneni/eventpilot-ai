@@ -79,29 +79,32 @@ export async function savePushSubscription(sub: PushSubscriptionData) {
     subs[existingIdx] = {
       ...subs[existingIdx],
       ...sub,
-      categories: sub.categories || subs[existingIdx].categories || ["all"],
+      user_id: sub.user_id || subs[existingIdx].user_id || null,
+      categories: (sub.categories && sub.categories.length > 0) ? sub.categories : (subs[existingIdx].categories || ["all"]),
     };
   } else {
     subs.push({
       ...sub,
-      categories: sub.categories || ["all"],
+      categories: (sub.categories && sub.categories.length > 0) ? sub.categories : ["all"],
       created_at: new Date().toISOString(),
     });
   }
   saveStore(subs);
 
-  // 2. Persist to Supabase audit_logs (guarantees cross-container persistence on Vercel)
+  // 1b. Also persist into data/store.json audit_logs if running in local/demo mode
   try {
-    const admin = getAdminClient();
-    if (admin) {
-      // Clean up previous subscription for same endpoint to avoid duplicates
-      await admin
-        .from("audit_logs")
-        .delete()
-        .eq("action", "push_subscription")
-        .filter("details->>endpoint", "eq", sub.endpoint);
-
-      await admin.from("audit_logs").insert({
+    const storePath = path.join(process.cwd(), "data", "store.json");
+    if (fs.existsSync(storePath)) {
+      const storeRaw = fs.readFileSync(storePath, "utf8");
+      const storeObj = JSON.parse(storeRaw);
+      storeObj.audit_logs = storeObj.audit_logs || [];
+      // Clean up previous
+      storeObj.audit_logs = storeObj.audit_logs.filter(
+        (a: { action?: string; details?: { endpoint?: string } }) =>
+          !(a.action === "push_subscription" && a.details?.endpoint === sub.endpoint)
+      );
+      storeObj.audit_logs.push({
+        id: Date.now(),
         user_id: sub.user_id || null,
         action: "push_subscription",
         details: {
@@ -112,7 +115,56 @@ export async function savePushSubscription(sub: PushSubscriptionData) {
           active: true,
           updated_at: new Date().toISOString(),
         },
+        created_at: new Date().toISOString(),
       });
+      fs.writeFileSync(storePath, JSON.stringify(storeObj, null, 2), "utf8");
+    }
+  } catch (err) {
+    console.warn("Failed to update push subscription in data/store.json:", err);
+  }
+
+  // 2. Persist to Supabase audit_logs (guarantees cross-container persistence on Vercel)
+  try {
+    const admin = getAdminClient();
+    if (admin) {
+      const insertPayload = {
+        action: "push_subscription",
+        details: {
+          endpoint: sub.endpoint,
+          keys: sub.keys,
+          categories: sub.categories && sub.categories.length > 0 ? sub.categories : ["all"],
+          user_id: sub.user_id || null,
+          active: true,
+          updated_at: new Date().toISOString(),
+        },
+      };
+
+      // Try inserting with user_id first
+      let insertResult = await admin.from("audit_logs").insert({
+        user_id: sub.user_id || null,
+        ...insertPayload,
+      });
+
+      // If user_id violates foreign key constraint (e.g. demo user or not present in auth.users),
+      // fallback to inserting with user_id: null while keeping user_id safely stored in details JSONB
+      if (insertResult.error && (insertResult.error.code === "23503" || insertResult.error.message?.includes("foreign key"))) {
+        insertResult = await admin.from("audit_logs").insert({
+          user_id: null,
+          ...insertPayload,
+        });
+      }
+
+      if (!insertResult.error) {
+        // Clean up older records for this endpoint to prevent duplicate entries
+        await admin
+          .from("audit_logs")
+          .delete()
+          .eq("action", "push_subscription")
+          .filter("details->>endpoint", "eq", sub.endpoint)
+          .lt("created_at", new Date(Date.now() - 5000).toISOString());
+      } else {
+        console.warn("Audit logs push subscription insert error:", insertResult.error);
+      }
     }
   } catch (err) {
     console.warn("Failed to save push subscription to Supabase audit_logs:", err);
@@ -120,16 +172,19 @@ export async function savePushSubscription(sub: PushSubscriptionData) {
 
   // 3. Also try push_subscriptions table if present
   try {
-    const supabase = await createClient();
-    await supabase.from("push_subscriptions").upsert(
-      {
-        endpoint: sub.endpoint,
-        p256dh: sub.keys.p256dh,
-        auth: sub.keys.auth,
-        user_id: sub.user_id || null,
-      },
-      { onConflict: "endpoint" }
-    );
+    const admin = getAdminClient();
+    const dbClient = admin || (await createClient().catch(() => null));
+    if (dbClient) {
+      await dbClient.from("push_subscriptions").upsert(
+        {
+          endpoint: sub.endpoint,
+          p256dh: sub.keys.p256dh,
+          auth: sub.keys.auth,
+          user_id: sub.user_id || null,
+        },
+        { onConflict: "endpoint" }
+      );
+    }
   } catch {
     // Handled by audit_logs and local store
   }
@@ -189,17 +244,27 @@ export async function getAllPushSubscriptions(): Promise<PushSubscriptionData[]>
           const d = row.details as Record<string, unknown> | null;
           if (d && typeof d.endpoint === "string" && d.keys && typeof d.keys === "object") {
             const keysObj = d.keys as { p256dh?: string; auth?: string };
-            if (keysObj.p256dh && keysObj.auth && !map.has(d.endpoint)) {
-              map.set(d.endpoint, {
-                endpoint: d.endpoint,
-                keys: {
-                  p256dh: keysObj.p256dh,
-                  auth: keysObj.auth,
-                },
-                user_id: (row.user_id as string) || (d.user_id as string) || null,
-                categories: Array.isArray(d.categories) ? (d.categories as string[]) : ["all"],
-                created_at: row.created_at as string,
-              });
+            if (keysObj.p256dh && keysObj.auth) {
+              const userId = (row.user_id as string) || (d.user_id as string) || null;
+              const cats = Array.isArray(d.categories) && d.categories.length > 0 ? (d.categories as string[]) : ["all"];
+              const existing = map.get(d.endpoint);
+              if (existing) {
+                if (userId && !existing.user_id) existing.user_id = userId;
+                if (cats && cats.length > 0 && (!existing.categories || existing.categories.includes("all"))) {
+                  existing.categories = cats;
+                }
+              } else {
+                map.set(d.endpoint, {
+                  endpoint: d.endpoint,
+                  keys: {
+                    p256dh: keysObj.p256dh,
+                    auth: keysObj.auth,
+                  },
+                  user_id: userId,
+                  categories: cats,
+                  created_at: row.created_at as string,
+                });
+              }
             }
           }
         }
@@ -209,23 +274,52 @@ export async function getAllPushSubscriptions(): Promise<PushSubscriptionData[]>
     console.warn("Failed to load push subscriptions from audit_logs:", err);
   }
 
+  // 2b. Also read from data/store.json if running in local demo mode
+  try {
+    const storePath = path.join(process.cwd(), "data", "store.json");
+    if (fs.existsSync(storePath)) {
+      const storeRaw = fs.readFileSync(storePath, "utf8");
+      const storeObj = JSON.parse(storeRaw);
+      const logs = storeObj.audit_logs || [];
+      for (const log of logs) {
+        if (log.action === "push_subscription" && log.details?.endpoint && log.details?.keys) {
+          const d = log.details;
+          if (d.keys.p256dh && d.keys.auth && !map.has(d.endpoint)) {
+            map.set(d.endpoint, {
+              endpoint: d.endpoint,
+              keys: d.keys,
+              user_id: log.user_id || d.user_id || null,
+              categories: Array.isArray(d.categories) ? d.categories : ["all"],
+              created_at: log.created_at,
+            });
+          }
+        }
+      }
+    }
+  } catch {
+    // Handled
+  }
+
   // 3. Fallback: try push_subscriptions table
   try {
-    const supabase = await createClient();
-    const { data } = await supabase.from("push_subscriptions").select("*");
-    if (data && data.length > 0) {
-      for (const row of data) {
-        if (!map.has(row.endpoint)) {
-          map.set(row.endpoint, {
-            endpoint: row.endpoint,
-            keys: {
-              p256dh: row.p256dh,
-              auth: row.auth,
-            },
-            user_id: row.user_id,
-            created_at: row.created_at,
-            categories: ["all"],
-          });
+    const admin = getAdminClient();
+    const dbClient = admin || (await createClient().catch(() => null));
+    if (dbClient) {
+      const { data } = await dbClient.from("push_subscriptions").select("*");
+      if (data && data.length > 0) {
+        for (const row of data) {
+          if (!map.has(row.endpoint)) {
+            map.set(row.endpoint, {
+              endpoint: row.endpoint,
+              keys: {
+                p256dh: row.p256dh,
+                auth: row.auth,
+              },
+              user_id: row.user_id,
+              created_at: row.created_at,
+              categories: ["all"],
+            });
+          }
         }
       }
     }
@@ -244,6 +338,16 @@ export interface PushPayload {
   icon?: string;
   badge?: string;
 }
+
+const DEFAULT_VAPID_OPTIONS: webpush.RequestOptions = {
+  vapidDetails: {
+    subject: VAPID_SUBJECT,
+    publicKey: VAPID_PUBLIC_KEY,
+    privateKey: VAPID_PRIVATE_KEY,
+  },
+  TTL: 86400,
+  urgency: "high",
+};
 
 export async function broadcastPushNotification(payload: PushPayload) {
   const subscriptions = await getAllPushSubscriptions();
@@ -265,8 +369,8 @@ export async function broadcastPushNotification(payload: PushPayload) {
     title: payload.title,
     body: payload.body,
     url: payload.url || "/events",
-    icon: payload.icon || "/icon.svg",
-    badge: payload.badge || "/icon.svg",
+    icon: (payload.icon && !payload.icon.endsWith(".svg")) ? payload.icon : "/icon-192.png",
+    badge: (payload.badge && !payload.badge.endsWith(".svg")) ? payload.badge : "/badge.png",
   });
 
   let sent = 0;
@@ -285,7 +389,8 @@ export async function broadcastPushNotification(payload: PushPayload) {
             endpoint: sub.endpoint,
             keys: sub.keys,
           },
-          jsonPayload
+          jsonPayload,
+          DEFAULT_VAPID_OPTIONS
         );
         sent++;
       } catch (err: unknown) {
@@ -301,6 +406,9 @@ export async function broadcastPushNotification(payload: PushPayload) {
   if (expiredEndpoints.length > 0) {
     const subs = ensureStore().filter((s) => !expiredEndpoints.includes(s.endpoint));
     saveStore(subs);
+    for (const ep of expiredEndpoints) {
+      removePushSubscription(ep).catch(() => {});
+    }
   }
 
   return { sent, failed, total: matching.length };
@@ -315,8 +423,8 @@ export async function sendPushToSubscription(sub: PushSubscriptionData, payload:
     title: payload.title,
     body: payload.body,
     url: payload.url || "/events",
-    icon: payload.icon || "/icon.svg",
-    badge: payload.badge || "/icon.svg",
+    icon: (payload.icon && !payload.icon.endsWith(".svg")) ? payload.icon : "/icon-192.png",
+    badge: (payload.badge && !payload.badge.endsWith(".svg")) ? payload.badge : "/badge.png",
   });
 
   return webpush.sendNotification(
@@ -324,7 +432,8 @@ export async function sendPushToSubscription(sub: PushSubscriptionData, payload:
       endpoint: sub.endpoint,
       keys: sub.keys,
     },
-    jsonPayload
+    jsonPayload,
+    DEFAULT_VAPID_OPTIONS
   );
 }
 
@@ -333,8 +442,10 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
   const subscriptions = await getAllPushSubscriptions();
   const userSubs = subscriptions.filter((s) => s.user_id === userId);
 
-  // If no subscription is explicitly tied to this userId yet, try all active subscriptions if there's only 1 (single user/tester)
-  const targets = userSubs.length > 0 ? userSubs : (subscriptions.length === 1 ? subscriptions : []);
+  // If no subscription is explicitly tied to this userId yet, fallback to single user subscription or anonymous subscriber
+  const targets = userSubs.length > 0
+    ? userSubs
+    : (subscriptions.length === 1 ? subscriptions : subscriptions.filter((s) => !s.user_id));
 
   if (targets.length === 0) {
     return { sent: 0, failed: 0, total: 0 };

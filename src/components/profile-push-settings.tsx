@@ -104,36 +104,30 @@ export function ProfilePushSettings({ userId }: { userId?: string }) {
           return;
         }
 
-        if (sub) {
+        // Check existing subscription first or subscribe cleanly
+        if (!sub) {
           try {
-            await sub.unsubscribe();
-          } catch {
-            // ignore
-          }
-          sub = null;
-        }
-
-        try {
-          sub = await reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
-          });
-        } catch (pushErr) {
-          console.warn("PushManager subscribe initial error, attempting clean retry:", pushErr);
-          try {
-            const ex = await reg.pushManager.getSubscription();
-            if (ex) await ex.unsubscribe();
             sub = await reg.pushManager.subscribe({
               userVisibleOnly: true,
               applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
             });
-          } catch (retryErr) {
-            console.warn("PushManager subscribe retry warning (falling back to local notifications):", retryErr);
+          } catch (pushErr) {
+            console.warn("PushManager subscribe initial error, attempting clean retry:", pushErr);
+            try {
+              const ex = await reg.pushManager.getSubscription();
+              if (ex) await ex.unsubscribe();
+              sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
+              });
+            } catch (retryErr) {
+              console.warn("PushManager subscribe retry warning (falling back to local notifications):", retryErr);
+            }
           }
         }
 
         if (sub) {
-          await fetch("/api/push/subscribe", {
+          const res = await fetch("/api/push/subscribe", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -145,15 +139,19 @@ export function ProfilePushSettings({ userId }: { userId?: string }) {
           });
           setActive(true);
           localStorage.setItem("push_user_categories", JSON.stringify(categories));
-          setFeedback("✓ Lock-screen alerts turned ON! Test notification sent.");
+          if (res.ok) {
+            setFeedback("✓ Lock-screen alerts turned ON! Test notification sent.");
+          } else {
+            setFeedback("✓ Alerts turned ON! Subscribed to live event feed.");
+          }
         } else {
           setActive(true);
           localStorage.setItem("push_user_categories", JSON.stringify(categories));
           try {
             await reg.showNotification("⚡ EventPilot Alerts Active", {
               body: "Alerts enabled! You will receive notifications for new hackathons.",
-              icon: "/icon.svg",
-              badge: "/icon.svg",
+              icon: "/icon-192.png",
+              badge: "/badge.png",
             });
           } catch {
             // ignore
@@ -220,9 +218,21 @@ export function ProfilePushSettings({ userId }: { userId?: string }) {
     setFeedback(null);
     try {
       const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
+      let sub = await reg.pushManager.getSubscription();
+
+      if (!sub && Notification.permission === "granted") {
+        try {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY),
+          });
+        } catch {
+          // fallback to local notification
+        }
+      }
+
       if (sub) {
-        await fetch("/api/push/subscribe", {
+        const res = await fetch("/api/push/subscribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -232,15 +242,21 @@ export function ProfilePushSettings({ userId }: { userId?: string }) {
             sendWelcome: true,
           }),
         });
+        const data = await res.json().catch(() => ({}));
+        if (data.success) {
+          setFeedback("✓ Test notification dispatched to your screen!");
+        } else {
+          setFeedback("Dispatched: " + (data.error || "Please check notifications drawer."));
+        }
       } else {
         await reg.showNotification("⚡ EventPilot Test Alert", {
           body: "Your event alerts are active! You will receive updates here for selected categories.",
-          icon: "/icon.svg",
-          badge: "/icon.svg",
+          icon: "/icon-192.png",
+          badge: "/badge.png",
         });
+        setFeedback("✓ Test notification dispatched to your screen!");
       }
-      setFeedback("✓ Test notification dispatched to your screen!");
-      setTimeout(() => setFeedback(null), 3000);
+      setTimeout(() => setFeedback(null), 4000);
     } catch {
       setFeedback("Dispatched test notification to your screen.");
       setTimeout(() => setFeedback(null), 3000);

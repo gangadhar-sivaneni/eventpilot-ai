@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
-  ArrowRight, ArrowUpRight, BellRing, CircleCheck, Download, FileText, Hand, Lock, Radar as RadarIcon,
-  ScanSearch, ShieldCheck, Trophy, UserRound, Wallet,
+  ArrowRight, ArrowUpRight, BellRing, Boxes, CircleCheck, Cloud, Code2, Download, FileText,
+  GitBranch, Hand, Lock, Radar as RadarIcon, ScanSearch, ShieldCheck, Sparkles, Trophy, UserRound, Wallet,
 } from "lucide-react";
 import { getUser } from "@/lib/auth";
 import { EVENT_COLUMNS, sourceName, type EventRow } from "@/lib/events";
@@ -50,6 +50,15 @@ const PROMISES = [
   { title: "Privacy & Data Ownership", desc: "Your personal details and profile answers stay strictly yours, encrypted and fully exportable." },
 ];
 
+const PRIZE_TRACKS = [
+  { label: "AI & ML", q: "ai", icon: Sparkles },
+  { label: "Hackathons", q: "hackathon", icon: Code2 },
+  { label: "Cloud & DevOps", q: "cloud", icon: Cloud },
+  { label: "Cybersecurity", q: "cybersecurity", icon: ShieldCheck },
+  { label: "Open Source", q: "open source", icon: GitBranch },
+  { label: "Web3 & Crypto", q: "web3", icon: Boxes },
+];
+
 export default async function Home({ searchParams }: { searchParams: Promise<{ next?: string; error?: string; deleted?: string }> }) {
   const { supabase, user } = await getUser();
   const { next, error, deleted } = await searchParams;
@@ -95,39 +104,80 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
               EventPilot is your autonomous radar for technology hackathons, conferences, and fests across India and worldwide.
               Every listing is verified in real time with live deadlines, prize pools, and instant form prep.
             </p>
-            <div className="rise mt-5 sm:mt-8 flex flex-wrap gap-2.5 sm:gap-3" style={{ "--i": 5 } as React.CSSProperties}>
+            <div className="rise mt-5 sm:mt-8 btn-row" style={{ "--i": 5 } as React.CSSProperties}>
               {user ? (
-                <Link href="/events" className="btn btn-primary">Open your events <ArrowRight aria-hidden="true" /></Link>
+                <>
+                  <Link href="/events" className="btn btn-primary">
+                    <span className="hidden sm:inline">Open your events</span>
+                    <span className="sm:hidden">Events</span>
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
+                  <Link href="/events?prize=1" className="btn btn-ghost">
+                    <Trophy className="h-4 w-4 text-signal" aria-hidden="true" />
+                    <span className="hidden sm:inline">Prize-money events</span>
+                    <span className="sm:hidden">Prize pool</span>
+                  </Link>
+                  <Link href="/alerts" className="btn btn-ghost">
+                    <BellRing className="h-4 w-4 text-accent" aria-hidden="true" />
+                    <span className="hidden sm:inline">Instant alerts</span>
+                    <span className="sm:hidden">Alerts</span>
+                  </Link>
+                </>
               ) : (
-                <LoginButton next={safeNext} label="Log in / Get started" />
+                <>
+                  <LoginButton
+                    next={safeNext}
+                    label={
+                      <>
+                        <span className="hidden sm:inline">Log in / Get started</span>
+                        <span className="sm:hidden">Get started</span>
+                      </>
+                    }
+                  />
+                  <Link href="/events" className="btn btn-ghost">
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    <span className="hidden sm:inline">Browse all events</span>
+                    <span className="sm:hidden">Browse</span>
+                  </Link>
+                  <Link href="/events?prize=1" className="btn btn-ghost">
+                    <Trophy className="h-4 w-4 text-signal" aria-hidden="true" />
+                    <span className="hidden sm:inline">Prize-money events</span>
+                    <span className="sm:hidden">Prize pool</span>
+                  </Link>
+                </>
               )}
-              <Link href="/events?prize=1" className="btn btn-ghost"><Trophy aria-hidden="true" /> Prize-money events</Link>
             </div>
-            <ul className="rise mt-6 sm:mt-9 flex flex-wrap gap-x-5 gap-y-2 text-xs sm:text-sm text-dim" style={{ "--i": 6 } as React.CSSProperties}>
+            <ul className="rise mt-5 sm:mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs sm:text-sm text-dim" style={{ "--i": 6 } as React.CSSProperties}>
               <li className="flex items-center gap-1.5 sm:gap-2"><ShieldCheck className="h-4 w-4 text-accent" aria-hidden="true" /> You approve every submission</li>
               <li className="flex items-center gap-1.5 sm:gap-2"><CircleCheck className="h-4 w-4 text-accent" aria-hidden="true" /> 100% verified official links</li>
               <li className="flex items-center gap-1.5 sm:gap-2"><Lock className="h-4 w-4 text-accent" aria-hidden="true" /> Encrypted &amp; private data</li>
             </ul>
           </div>
 
-          <div className="relative mx-auto w-full max-w-[34rem]">
+          <div className="relative mx-auto w-full max-w-[34rem] mt-8 sm:mt-10 lg:mt-0">
             <div className="fade-in"><Radar /></div>
-            <div className="absolute inset-0 flex flex-col justify-center gap-3 px-2 sm:px-0">
+            <div className="absolute inset-0 flex flex-col justify-center gap-2 sm:gap-3 px-2 sm:px-4">
               {events.map((e, i) => (
                 <Link
                   key={e.id}
                   href={`/events/${e.id}`}
-                  className={`floaty card card-hover block w-[92%] bg-surface/90 p-3.5 backdrop-blur-md sm:w-[72%] sm:p-4 ${i === 1 ? "self-end" : i === 2 ? "sm:ml-[8%]" : ""}`}
+                  className={`floaty card card-hover block w-[84%] sm:w-[76%] md:w-[72%] bg-surface/92 p-2 sm:p-2.5 md:p-3.5 shadow-md backdrop-blur-md rounded-xl sm:rounded-2xl border border-line ${
+                    i === 1 ? "self-end mr-1 sm:mr-3" : i === 2 ? "self-center sm:self-start sm:ml-[8%]" : "self-start ml-1 sm:ml-3"
+                  }`}
                   style={{ "--i": i } as React.CSSProperties}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <StatusPill status={e.registration_status} />
-                    <span className="hidden truncate font-mono text-[0.7rem] font-medium text-accent sm:inline">{sourceName(e)}</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <StatusPill status={e.registration_status} compact />
+                    <span className="truncate font-mono text-[0.65rem] sm:text-[0.7rem] font-medium text-accent">
+                      {sourceName(e)}
+                    </span>
                   </div>
-                  <p className="mt-2 line-clamp-1 font-display text-lg font-semibold">{e.title}</p>
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <PlacePill e={e} />
-                    <PrizePill prize={e.prize_text} />
+                  <p className="mt-1 sm:mt-1.5 line-clamp-1 font-display text-xs sm:text-sm md:text-base font-bold tracking-tight text-text">
+                    {e.title}
+                  </p>
+                  <div className="mt-1 sm:mt-1.5 flex items-center justify-between gap-1.5 sm:gap-2">
+                    <PlacePill e={e} compact />
+                    <PrizePill prize={e.prize_text} compact />
                   </div>
                 </Link>
               ))}
@@ -221,12 +271,29 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
         <p className="eyebrow">What you get</p>
         <h2 id="features" className="mt-3 max-w-2xl text-4xl font-bold sm:text-5xl">Built for the moment registration opens.</h2>
         <div className="mt-12 grid gap-4 md:grid-cols-6">
-          <article className="on-dark reveal card card-hover p-7 md:col-span-3">
-            <Trophy className="h-6 w-6 text-accent" aria-hidden="true" />
-            <h3 className="mt-5 text-2xl font-semibold">Money events, first</h3>
-            <p className="mt-2 text-dim">Prize pools are read from each listing and flagged, so cash events never get buried. Filter to them in one tap.</p>
-            <div className="mt-6 flex flex-wrap gap-2">
-              {["AI", "Open source", "Cloud", "Cybersecurity"].map((p) => <span key={p} className="pill pill-flare">{p}</span>)}
+          <article className="on-dark reveal card card-hover p-6 sm:p-7 md:col-span-3 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <Trophy className="h-6 w-6 text-accent" aria-hidden="true" />
+                <span className="eyebrow text-accent font-mono text-[0.68rem] tracking-wider">1-tap filters</span>
+              </div>
+              <h3 className="mt-4 sm:mt-5 text-xl sm:text-2xl font-semibold">Money events, first</h3>
+              <p className="mt-2 text-dim text-sm sm:text-base leading-relaxed">
+                Prize pools are read from each listing and flagged, so cash events never get buried. Filter to them in one tap.
+              </p>
+            </div>
+            <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {PRIZE_TRACKS.map(({ label, q, icon: Icon }) => (
+                <Link
+                  key={label}
+                  href={`/events?prize=1&q=${encodeURIComponent(q)}`}
+                  className="pill pill-flare w-full justify-center gap-1.5 py-2 px-2 text-xs font-semibold transition-all hover:scale-[1.03] active:scale-[0.98] group"
+                  title={`Filter prize events by ${label}`}
+                >
+                  <Icon className="h-3.5 w-3.5 text-signal shrink-0 group-hover:rotate-6 transition-transform" aria-hidden="true" />
+                  <span className="truncate">{label}</span>
+                </Link>
+              ))}
             </div>
           </article>
           <article className="reveal card card-hover p-7 md:col-span-3">
@@ -302,10 +369,30 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ n
           <div className="grid-bg pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
           <RadarIcon className="relative mx-auto h-10 w-10" aria-hidden="true" />
           <h2 className="relative mx-auto mt-5 max-w-2xl text-4xl font-bold sm:text-5xl">Let the agent watch. You decide.</h2>
-          <p className="relative mx-auto mt-4 max-w-lg font-medium">Set your interests once. Get the right events, and forms ready before the rush.</p>
-          <div className="relative mt-8 flex flex-wrap justify-center gap-3">
-            {user ? <Link href="/profile" className="btn btn-dark">Set your interests <ArrowRight aria-hidden="true" /></Link> : <LoginButton next="/profile" label="Log in / Sign up" variant="dark" />}
-            <Link href="/events" className="btn btn-ghost">Browse events <ArrowUpRight aria-hidden="true" /></Link>
+          <div className="relative mt-8 btn-row justify-center max-w-xs sm:max-w-none mx-auto">
+            {user ? (
+              <Link href="/profile" className="btn btn-dark">
+                <span className="hidden sm:inline">Set your interests</span>
+                <span className="sm:hidden">Interests</span>
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            ) : (
+              <LoginButton
+                next="/profile"
+                label={
+                  <>
+                    <span className="hidden sm:inline">Log in / Sign up</span>
+                    <span className="sm:hidden">Sign up</span>
+                  </>
+                }
+                variant="dark"
+              />
+            )}
+            <Link href="/events" className="btn btn-ghost">
+              <span className="hidden sm:inline">Browse all events</span>
+              <span className="sm:hidden">Browse</span>
+              <ArrowUpRight aria-hidden="true" />
+            </Link>
           </div>
         </div>
       </section>

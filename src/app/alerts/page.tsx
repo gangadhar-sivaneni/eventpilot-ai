@@ -20,7 +20,7 @@ const TYPES: Record<string, [string, LucideIcon, string]> = {
 };
 
 export default async function AlertsPage({ searchParams }: { searchParams: Promise<{ unread?: string }> }) {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
   const { unread } = await searchParams;
   let q = supabase
     .from("event_alerts")
@@ -53,7 +53,7 @@ export default async function AlertsPage({ searchParams }: { searchParams: Promi
       </PageHeader>
 
       <div className="mt-6">
-        <ProfilePushSettings />
+        <ProfilePushSettings userId={user.id} />
       </div>
 
       <nav aria-label="Alert filter" className="mt-6 flex gap-2">

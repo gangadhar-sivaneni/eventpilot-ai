@@ -8,7 +8,7 @@ import type { AuthMode } from "@/components/auth-view";
 interface LoginButtonProps {
   next?: string;
   compact?: boolean;
-  label?: string;
+  label?: React.ReactNode;
   variant?: "primary" | "dark" | "ghost" | "quiet";
   defaultMode?: AuthMode;
   className?: string;

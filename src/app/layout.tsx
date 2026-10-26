@@ -68,7 +68,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           <DeletionScheduledPopup />
         </Suspense>
         <OAuthCallbackForwarder />
-        <PushSubscriptionSync />
+        <PushSubscriptionSync userId={user?.id} />
         <PushNotificationBanner />
         <header className="sticky top-0 z-40 border-b border-line bg-ink/85 backdrop-blur-xl">
           <nav className="shell flex h-16 items-center gap-3 md:gap-6" aria-label="Main">
@@ -129,54 +129,64 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 
         <main id="main" className="flex-1">{children}</main>
 
-        <footer className="on-dark mt-24 border-t border-line/40">
-          <div className="shell grid gap-10 py-14 sm:py-16 md:grid-cols-[1.6fr_1fr_1.2fr]">
+        <footer className="on-dark mt-24 border-t border-line/40 pb-20 md:pb-0">
+          <div className="shell grid gap-10 py-12 sm:py-16 md:grid-cols-[1.5fr_1fr_1.2fr]">
             <div className="space-y-4">
               <Logo />
               <p className="max-w-md text-sm text-dim leading-relaxed">
                 The premier autonomous radar for tech events, hackathons, and developer conferences. Real-time discovery, intelligent deadline tracking, and verified application prep.
               </p>
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <span className="pill pill-ok text-xs">
-                  <span className="ping relative h-1.5 w-1.5 rounded-full bg-ok" aria-hidden="true" />
+              <div className="grid grid-cols-2 gap-2 pt-1 sm:flex sm:flex-wrap sm:gap-2">
+                <span className="pill pill-ok text-xs w-full justify-center sm:w-auto">
+                  <span className="ping relative h-1.5 w-1.5 rounded-full bg-ok flex-none" aria-hidden="true" />
                   Live Sync Active
                 </span>
-                <span className="pill text-xs">Verified Direct Links</span>
-                <span className="pill text-xs">Zero Hallucination</span>
+                <span className="pill text-xs w-full justify-center sm:w-auto">Verified Direct Links</span>
+                <span className="pill text-xs w-full justify-center sm:w-auto">Zero Hallucination</span>
+                <span className="pill text-xs w-full justify-center sm:w-auto">Encrypted &amp; Private</span>
               </div>
             </div>
-            <div>
-              <p className="eyebrow mb-3.5">Product</p>
-              <ul className="space-y-2.5 text-sm text-dim">
-                <li><Link className="hover:text-text transition-colors" href="/events">Browse all events</Link></li>
-                <li><Link className="hover:text-text transition-colors" href="/events?prize=1">Prize money hackathons</Link></li>
-                <li><Link className="hover:text-text transition-colors" href="/events?fee=free">Free registrations</Link></li>
-                <li><Link className="hover:text-text transition-colors" href="/alerts">Personalized alerts</Link></li>
-                <li><Link className="hover:text-text transition-colors" href="/registrations">Form co-pilot</Link></li>
-              </ul>
-            </div>
-            <div>
-              <p className="eyebrow mb-3.5">Verified Platforms</p>
-              <ul className="space-y-2.5 text-sm text-dim">
-                <li className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-signal" aria-hidden="true" />
-                  <span>Devfolio · Unstop · Devpost</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-signal" aria-hidden="true" />
-                  <span>Luma · StudentTribe · HackerEarth</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-signal" aria-hidden="true" />
-                  <span>Google Developer Groups · MLH</span>
-                </li>
-              </ul>
+
+            <div className="grid grid-cols-2 gap-6 sm:gap-8 md:contents">
+              <div>
+                <p className="eyebrow mb-3.5">Product</p>
+                <ul className="space-y-2.5 text-xs sm:text-sm text-dim">
+                  <li><Link className="hover:text-text transition-colors" href="/events">Browse all events</Link></li>
+                  <li><Link className="hover:text-text transition-colors" href="/events?prize=1">Prize hackathons</Link></li>
+                  <li><Link className="hover:text-text transition-colors" href="/events?fee=free">Free registrations</Link></li>
+                  <li><Link className="hover:text-text transition-colors" href="/alerts">Personalized alerts</Link></li>
+                  <li><Link className="hover:text-text transition-colors" href="/registrations">Form co-pilot</Link></li>
+                </ul>
+              </div>
+
+              <div>
+                <p className="eyebrow mb-3.5">Verified Platforms</p>
+                <ul className="space-y-2.5 text-xs sm:text-sm text-dim">
+                  <li className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-signal flex-none" aria-hidden="true" />
+                    <span>Devfolio · Unstop</span>
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-signal flex-none" aria-hidden="true" />
+                    <span>Devpost · Luma</span>
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-signal flex-none" aria-hidden="true" />
+                    <span>StudentTribe · MLH</span>
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-signal flex-none" aria-hidden="true" />
+                    <span>HackerEarth · GDG</span>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
+
           <div className="shell flex flex-col gap-3 border-t border-line/40 py-6 text-xs text-faint sm:flex-row sm:items-center sm:justify-between">
-            <p>© {new Date().getFullYear()} EventPilot. All rights reserved. Live verified event data.</p>
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-xs text-dim">Autonomous Event Discovery & Application Prep</span>
+            <p className="text-center sm:text-left">© {new Date().getFullYear()} EventPilot. All rights reserved. Live verified event data.</p>
+            <div className="flex items-center justify-center sm:justify-end gap-3">
+              <span className="font-mono text-xs text-dim text-center">Autonomous Event Discovery &amp; Form Prep</span>
             </div>
           </div>
         </footer>
