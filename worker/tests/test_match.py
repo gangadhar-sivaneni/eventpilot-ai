@@ -35,3 +35,20 @@ def test_build_alerts_types_and_interest():
     assert kinds == {(1, "new_event"), (2, "registration_opened"), (3, "availability_changed"), (4, "deadline_reminder")}
     assert build_alerts([{**PREFS, "alert_new_event": False}], [ev()], [], [], {}, NOW) == []
     assert build_alerts([PREFS], [], [], [ev(id=4)], {}, NOW) == []  # reminders only for interested users
+
+
+def test_auto_registration_and_paid_alerts():
+    free_ev = ev(id=10, fee_status="free", fee_amount=0)
+    paid_ev = ev(id=11, fee_status="paid", fee_amount=250)
+
+    # When auto_register is True: free events yield auto_registered alert
+    auto_prefs = {**PREFS, "auto_register": True, "notify_paid": True}
+    alerts = build_alerts([auto_prefs], [free_ev, paid_ev], [], [], {}, NOW)
+    kinds = {(a["event_id"], a["alert_type"]) for a in alerts}
+    assert kinds == {(10, "auto_registered"), (11, "paid_event_review")}
+
+    # When notify_paid is False: paid events are not alerted
+    no_paid_prefs = {**PREFS, "auto_register": True, "notify_paid": False}
+    alerts_no_paid = build_alerts([no_paid_prefs], [free_ev, paid_ev], [], [], {}, NOW)
+    kinds_no_paid = {(a["event_id"], a["alert_type"]) for a in alerts_no_paid}
+    assert kinds_no_paid == {(10, "auto_registered")}

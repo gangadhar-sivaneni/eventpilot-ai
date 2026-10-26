@@ -20,19 +20,25 @@ export interface PushSubscriptionData {
 
 const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
-  "BOto0VMzDaKITShUIzsspE4JAgxnsqeQok9Acd8iKX4paqSJLfNIqBFBKPILRfEKmtT3bqlAX8pLHpIgyIh1Bos";
+  (process.env.NODE_ENV !== "production"
+    ? "BOto0VMzDaKITShUIzsspE4JAgxnsqeQok9Acd8iKX4paqSJLfNIqBFBKPILRfEKmtT3bqlAX8pLHpIgyIh1Bos"
+    : "");
 
 const VAPID_PRIVATE_KEY =
   process.env.VAPID_PRIVATE_KEY ||
-  "KbOb8HX3h9to6oeZBUIH2yVSGqZ5BXlFz3Tn4ESMPGM";
+  (process.env.NODE_ENV !== "production"
+    ? "KbOb8HX3h9to6oeZBUIH2yVSGqZ5BXlFz3Tn4ESMPGM"
+    : "");
 
 const VAPID_SUBJECT =
   process.env.VAPID_SUBJECT || "mailto:notifications@eventpilot.ai";
 
-try {
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-} catch (e) {
-  console.warn("Failed to set VAPID details:", e);
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  try {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+  } catch (e) {
+    console.warn("Failed to set VAPID details:", e);
+  }
 }
 
 const DATA_DIR = process.env.VERCEL

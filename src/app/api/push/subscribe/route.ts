@@ -38,13 +38,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid key format" }, { status: 400 });
     }
 
-    // 3. Obtain user ID from authenticated session with validated fallback
+    // 3. Obtain user ID strictly from authenticated session (prevents IDOR user impersonation)
     const { user } = await getUser().catch(() => ({ user: null }));
-    const authenticatedUserId = user?.id || null;
-    const bodyUserId = typeof body.userId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.userId)
-      ? body.userId
-      : null;
-    const effectiveUserId = authenticatedUserId || bodyUserId || null;
+    const effectiveUserId = user?.id || null;
 
     // 4. Sanitize categories (defaults to 'all' if not specified)
     const rawCategories = Array.isArray(categories) && categories.length > 0 ? categories : ["all"];
@@ -112,8 +108,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, message: "Subscription saved successfully" });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Push subscribe error:", err);
+    return NextResponse.json({ error: "Failed to process push subscription" }, { status: 500 });
   }
 }
 
@@ -129,7 +125,7 @@ export async function DELETE(req: NextRequest) {
     await removePushSubscription(endpoint);
     return NextResponse.json({ success: true, message: "Subscription removed successfully" });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Push unsubscribe error:", err);
+    return NextResponse.json({ error: "Failed to remove subscription" }, { status: 500 });
   }
 }

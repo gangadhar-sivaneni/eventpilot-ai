@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BellRing, CalendarClock, CheckCheck, DoorOpen, Inbox, RefreshCw, Settings2, type LucideIcon } from "lucide-react";
+import { AlertTriangle, BellRing, CalendarClock, CheckCheck, CreditCard, DoorOpen, Inbox, RefreshCw, Settings2, Sparkles, type LucideIcon } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { LocalTime } from "@/components/local-time";
 import { SubmitButton } from "@/components/submit-button";
@@ -17,6 +17,9 @@ const TYPES: Record<string, [string, LucideIcon, string]> = {
   availability_changed: ["Status changed", RefreshCw, "text-sky bg-sky/10 border-sky/25"],
   registration_started: ["Registration started", DoorOpen, "text-signal bg-signal/10 border-signal/25"],
   registration_confirmed: ["Registration confirmed", CheckCheck, "text-ok bg-ok/10 border-ok/25"],
+  auto_registered: ["Auto-registered", Sparkles, "text-signal bg-signal/15 border-signal/30"],
+  paid_event_review: ["Paid Event (Review)", CreditCard, "text-amber-500 bg-amber-500/10 border-amber-500/25"],
+  missing_info: ["Action Required", AlertTriangle, "text-amber-500 bg-amber-500/15 border-amber-500/30"],
 };
 
 export default async function AlertsPage({ searchParams }: { searchParams: Promise<{ unread?: string }> }) {
@@ -73,7 +76,7 @@ export default async function AlertsPage({ searchParams }: { searchParams: Promi
         )}
         <ul className="space-y-3">
           {(alerts ?? []).map((a, i) => {
-            const [label, Icon, tone] = TYPES[a.alert_type];
+            const [label, Icon, tone] = TYPES[a.alert_type] || ["Alert", BellRing, "text-dim bg-raised border-line"];
             const ev = a.events as unknown as { title: string } | null;
             return (
               <li key={a.id} className={`rise card relative flex items-start gap-4 p-4 sm:p-5 ${a.read_at ? "opacity-70" : ""}`} style={{ "--i": i % 10 } as React.CSSProperties}>

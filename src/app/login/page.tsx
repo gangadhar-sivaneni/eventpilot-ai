@@ -27,7 +27,7 @@ export default async function LoginPage({
     redirect(safeNext);
   }
 
-  const defaultMode = params.mode === "signup" ? "signup" : "login";
+  const defaultMode = params.mode === "signup" ? "signup" : params.mode === "reset" ? "reset" : "login";
 
   return (
     <div className="shell flex min-h-[calc(100vh-14rem)] flex-col items-center justify-center py-10 md:py-16">

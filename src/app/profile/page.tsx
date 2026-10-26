@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Bell, Bookmark, Download, ListChecks, Trash2, UserRound } from "lucide-react";
+import { AlertCircle, Bell, Bookmark, CheckCircle2, Download, ListChecks, Sparkles, Trash2, UserRound } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { PROFILE_FIELDS, PROFILE_GROUPS } from "@/lib/profile";
 import { SubmitButton } from "@/components/submit-button";
@@ -116,6 +116,60 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
             </div>
 
             <form action={savePreferences} className="mt-6 space-y-6">
+              {/* Autonomous Registration Agent card */}
+              <div className="rounded-2xl border border-accent/25 bg-accent/5 p-5 sm:p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/15 text-accent">
+                      <Sparkles className="h-5 w-5" aria-hidden="true" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-base sm:text-lg">Autonomous Registration Agent</h3>
+                      <p className="text-xs sm:text-sm text-dim">
+                        Automatically prepares and fills registrations for matching events without manual clicks.
+                      </p>
+                    </div>
+                  </div>
+                  {p?.full_name ? (
+                    <span className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-full bg-signal/15 px-3 py-1 text-xs font-semibold text-signal">
+                      <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Details Ready
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-500">
+                      <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" /> Details Incomplete
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <Toggle
+                    name="auto_register"
+                    title="Autonomous Registration"
+                    hint="Auto-prepares registrations for matching free events using your account form details."
+                    checked={prefs?.auto_register}
+                  />
+                  <Toggle
+                    name="notify_paid"
+                    title="Notify for Paid Events"
+                    hint="Receive alerts for paid events matching your selections. Requires manual review before payment."
+                    checked={prefs?.notify_paid ?? true}
+                  />
+                </div>
+
+                <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-line/40 pt-3 text-xs text-faint">
+                  <span>
+                    {prefs?.auto_register
+                      ? "⚡ Agent Active: Automatically monitoring & preparing registrations for matched free events."
+                      : "⏸️ Agent Standby: Toggle on to enable automatic registration when account details are filled."}
+                  </span>
+                  {!p?.full_name && (
+                    <a href="#details" className="text-amber-500 hover:underline font-medium">
+                      Fill Full Name in Details above to activate →
+                    </a>
+                  )}
+                </div>
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <div><label htmlFor="categories" className="field-label">Categories</label>
                   <input id="categories" name="categories" defaultValue={prefs?.categories.join(", ")} placeholder="hackathon, ai, workshop" className="field" /></div>
@@ -143,7 +197,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
                   {ALERTS.map(([k, t, h]) => <Toggle key={k} name={k} title={t} hint={h} checked={prefs?.[k]} />)}
                 </div>
               </fieldset>
-              <SubmitButton pendingText="Saving…">Save interests</SubmitButton>
+              <SubmitButton pendingText="Saving…">Save preferences</SubmitButton>
             </form>
           </section>
 

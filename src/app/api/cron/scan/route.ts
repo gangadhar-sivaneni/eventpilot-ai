@@ -30,17 +30,14 @@ export async function GET(req: NextRequest) {
 
   let isAuthorized = false;
 
-  // 1. If CRON_SECRET is configured in environment, strictly require it or admin
-  if (cronSecret) {
-    if (providedKey && timingSafeCompare(providedKey, cronSecret)) {
+  // 1. If CRON_SECRET is configured in environment, strictly require timing-safe match
+  if (cronSecret && providedKey) {
+    if (timingSafeCompare(providedKey, cronSecret)) {
       isAuthorized = true;
     }
-  } else {
-    // 2. If CRON_SECRET is not yet set in environment:
-    // Accept standard cron key (e.g. ?key=eventpilot_cron_10m or Bearer eventpilot_cron_10m)
-    // or allow external cron services (cron-job.org, EasyCron).
-    // Safe because: no private data is exposed, and rate limiting below strictly caps execution.
-    if (!providedKey || providedKey === "eventpilot_cron_10m" || timingSafeCompare(providedKey, "eventpilot_cron_10m")) {
+  } else if (!cronSecret && process.env.NODE_ENV !== "production") {
+    // 2. In local development only, allow the default test key (strictly requiring the key)
+    if (providedKey && timingSafeCompare(providedKey, "eventpilot_cron_10m")) {
       isAuthorized = true;
     }
   }
@@ -100,10 +97,12 @@ export async function GET(req: NextRequest) {
         results.github_actions = "dispatched_successfully";
       } else {
         const errText = await ghRes.text();
-        results.github_actions_error = errText;
+        console.error("GitHub Actions dispatch failed:", errText);
+        results.github_actions = "dispatch_failed";
       }
     } catch (err: unknown) {
-      results.github_actions_error = err instanceof Error ? err.message : String(err);
+      console.error("GitHub Actions dispatch exception:", err);
+      results.github_actions = "dispatch_error";
     }
   }
 
@@ -135,7 +134,8 @@ export async function GET(req: NextRequest) {
 
       results.local_worker = "spawned_detached";
     } catch (err: unknown) {
-      results.local_worker_error = err instanceof Error ? err.message : String(err);
+      console.error("Local worker spawn exception:", err);
+      results.local_worker = "spawn_error";
     }
   }
 
@@ -248,7 +248,7 @@ export async function GET(req: NextRequest) {
     }
   } catch (err: unknown) {
     console.warn("Push notification broadcast error during cron scan:", err);
-    results.push_broadcast_error = err instanceof Error ? err.message : String(err);
+    results.push_broadcast = "broadcast_error";
   }
 
   return NextResponse.json({

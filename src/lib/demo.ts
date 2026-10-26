@@ -233,6 +233,8 @@ function seed(): Store {
       alert_deadline_reminder: true,
       alert_availability_changed: true,
       email_alerts: true,
+      auto_register: false,
+      notify_paid: true,
     }],
     registration_answers: [
       { id: 1, user_id: uid, question: "Why do you want to attend?", answer: "To build impactful solutions with an agile team, explore cutting-edge AI architectures, and learn from industry mentors." },

@@ -133,10 +133,10 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
               {user ? (
                 <form action={startRegistration}>
                   <input type="hidden" name="event_id" value={e.id} />
-                  <SubmitButton className="btn btn-primary w-full" pendingText="Starting…">Prepare my registration</SubmitButton>
+                  <SubmitButton className="btn btn-primary w-full" pendingText="Registering…">Register with Agent</SubmitButton>
                 </form>
               ) : (
-                <div className="[&>button]:w-full"><LoginButton next={`/events/${e.id}`} label="Log in to prepare" /></div>
+                <div className="[&>button]:w-full"><LoginButton next={`/events/${e.id}`} label="Log in to register" /></div>
               )}
               {officialUrl && (
                 <a href={officialUrl} target="_blank" rel="noopener noreferrer" className="btn btn-ghost w-full">

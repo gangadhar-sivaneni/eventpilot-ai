@@ -23,8 +23,9 @@ import { GoogleMark } from "@/components/google-mark";
 import { RadarLoader } from "@/components/radar-loader";
 import { sanitizeRedirectPath } from "@/lib/security";
 
-export type AuthMode = "login" | "signup";
+export type AuthMode = "login" | "signup" | "reset";
 export type SignupStep = 1 | 2 | 3;
+export type ResetStep = 1 | 2 | 3;
 
 interface AuthViewProps {
   next?: string;
@@ -44,6 +45,7 @@ export function AuthView({
 
   const [mode, setMode] = useState<AuthMode>(defaultMode);
   const [signupStep, setSignupStep] = useState<SignupStep>(1);
+  const [resetStep, setResetStep] = useState<ResetStep>(1);
 
   // Form fields
   const [fullName, setFullName] = useState("");
@@ -78,6 +80,10 @@ export function AuthView({
   function switchMode(newMode: AuthMode) {
     setMode(newMode);
     setSignupStep(1);
+    setResetStep(1);
+    setPassword("");
+    setConfirmPassword("");
+    setOtp(Array(otpLength).fill(""));
     setError(null);
     setInfo(null);
   }
@@ -430,6 +436,188 @@ export function AuthView({
     setInfo(`New verification code sent to ${email.trim()}.`);
   }
 
+  // Reset Step 1: Send reset OTP
+  async function handleSendResetOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setInfo(null);
+
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail || !trimmedEmail.includes("@")) {
+      setError("Please enter your registered email address.");
+      return;
+    }
+
+    setBusy(true);
+
+    if (DEMO) {
+      setBusy(false);
+      setResetStep(2);
+      setResendCooldown(30);
+      setOtp(Array(otpLength).fill(""));
+      setInfo("Demo mode: verification code is 123456.");
+      return;
+    }
+
+    const supabase = createClient();
+    const { error: err } = await supabase.auth.signInWithOtp({
+      email: trimmedEmail,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(cleanNext)}`,
+      },
+    });
+
+    setBusy(false);
+    if (err) {
+      if (
+        err.message?.toLowerCase().includes("user not found") ||
+        err.message?.toLowerCase().includes("signups not allowed")
+      ) {
+        setError("No account found with this email. Please check your spelling or sign up.");
+      } else {
+        setError(err.message || "Failed to send verification code. Please try again.");
+      }
+      return;
+    }
+
+    setResetStep(2);
+    setResendCooldown(30);
+    setOtp(Array(otpLength).fill(""));
+    setInfo(`A verification code was sent to ${trimmedEmail}.`);
+  }
+
+  // Reset Step 2: Verify reset OTP
+  async function handleVerifyResetOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setInfo(null);
+
+    const token = otp.join("").trim();
+    if (token.length !== otpLength && (!DEMO || token !== "123456")) {
+      setError(`Please enter the full ${otpLength}-digit verification code.`);
+      return;
+    }
+
+    setBusy(true);
+
+    if (DEMO) {
+      setBusy(false);
+      setResetStep(3);
+      setPassword("");
+      setConfirmPassword("");
+      setInfo("Code verified! Set your new password below.");
+      return;
+    }
+
+    const supabase = createClient();
+    const { error: err } = await supabase.auth.verifyOtp({
+      email: email.trim().toLowerCase(),
+      token,
+      type: "email",
+    });
+
+    setBusy(false);
+    if (err) {
+      setError(
+        err.message === "Token has expired or is invalid"
+          ? "Invalid or expired verification code. Please check and try again."
+          : err.message
+      );
+      return;
+    }
+
+    setResetStep(3);
+    setPassword("");
+    setConfirmPassword("");
+    setInfo("Code verified! Enter and re-type your new password below.");
+  }
+
+  // Reset Step 3: Set new password and log in
+  async function handleResetPasswordSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setInfo(null);
+
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters long.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match. Please re-type carefully.");
+      return;
+    }
+
+    setBusy(true);
+
+    if (DEMO) {
+      startTransition(async () => {
+        await demoSignIn(cleanNext);
+        onSuccess?.();
+      });
+      return;
+    }
+
+    const supabase = createClient();
+    const { error: err } = await supabase.auth.updateUser({
+      password,
+      data: {
+        has_password: true,
+      },
+    });
+
+    if (err) {
+      setBusy(false);
+      setError(err.message || "Failed to update password. Please try again.");
+      return;
+    }
+
+    setBusy(false);
+    setIsRedirecting(true);
+    setInfo("Password updated successfully! Logging you in…");
+
+    try {
+      sessionStorage.setItem("show_post_login_push_prompt", "1");
+    } catch {
+      // ignore
+    }
+
+    onSuccess?.();
+    window.location.assign(cleanNext);
+  }
+
+  // Resend reset OTP handler
+  async function handleResendResetOtp() {
+    if (resendCooldown > 0 || busy) return;
+    setError(null);
+    setBusy(true);
+
+    if (DEMO) {
+      setBusy(false);
+      setResendCooldown(30);
+      setInfo("New verification code sent! (Demo code: 123456)");
+      return;
+    }
+
+    const supabase = createClient();
+    const { error: err } = await supabase.auth.signInWithOtp({
+      email: email.trim().toLowerCase(),
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(cleanNext)}`,
+      },
+    });
+
+    setBusy(false);
+    if (err) {
+      setError(err.message || "Failed to resend code.");
+      return;
+    }
+
+    setResendCooldown(30);
+    setInfo(`New verification code sent to ${email.trim()}.`);
+  }
+
   // Password strength calculation
   const hasMinLength = password.length >= 8;
   const hasLetter = /[a-zA-Z]/.test(password);
@@ -447,48 +635,79 @@ export function AuthView({
   return (
     <div className="w-full">
       {/* Mode Switcher Tabs */}
-      <div className="mb-6 flex rounded-xl border border-line bg-raised p-1" role="tablist" aria-label="Authentication modes">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "login"}
-          onClick={() => switchMode("login")}
-          className={`flex-1 rounded-lg py-2 text-center text-sm font-semibold transition-all ${
-            mode === "login"
-              ? "bg-text text-ink shadow-sm"
-              : "text-dim hover:text-text"
-          }`}
-        >
-          Log in
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "signup"}
-          onClick={() => switchMode("signup")}
-          className={`flex-1 rounded-lg py-2 text-center text-sm font-semibold transition-all ${
-            mode === "signup"
-              ? "bg-text text-ink shadow-sm"
-              : "text-dim hover:text-text"
-          }`}
-        >
-          Create account
-        </button>
-      </div>
+      {mode !== "reset" ? (
+        <div className="mb-6 flex rounded-xl border border-line bg-raised p-1" role="tablist" aria-label="Authentication modes">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "login"}
+            onClick={() => switchMode("login")}
+            className={`flex-1 rounded-lg py-2 text-center text-sm font-semibold transition-all ${
+              mode === "login"
+                ? "bg-text text-ink shadow-sm"
+                : "text-dim hover:text-text"
+            }`}
+          >
+            Log in
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "signup"}
+            onClick={() => switchMode("signup")}
+            className={`flex-1 rounded-lg py-2 text-center text-sm font-semibold transition-all ${
+              mode === "signup"
+                ? "bg-text text-ink shadow-sm"
+                : "text-dim hover:text-text"
+            }`}
+          >
+            Create account
+          </button>
+        </div>
+      ) : (
+        <div className="mb-5 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => switchMode("login")}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-dim hover:text-text transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Back to login
+          </button>
+          <span className="font-mono text-xs text-accent">Step {resetStep} of 3</span>
+        </div>
+      )}
 
       {/* Header Info */}
       <div className="mb-5 text-center">
+        {mode === "reset" && (
+          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl border border-line bg-raised text-signal">
+            <KeyRound className="h-5 w-5" aria-hidden="true" />
+          </div>
+        )}
         <h2 className="text-2xl font-bold tracking-tight text-text">
-          {title || (mode === "login" ? "Welcome back to EventPilot" : "Join EventPilot")}
+          {title || (
+            mode === "login"
+              ? "Welcome back to EventPilot"
+              : mode === "signup"
+              ? "Join EventPilot"
+              : "Reset your password"
+          )}
         </h2>
         <p className="mt-1 text-sm text-dim">
           {mode === "login"
             ? "Log in with your email & password, or use Google."
-            : signupStep === 1
-            ? "Enter your basic details to get started. No full forms required."
-            : signupStep === 2
-            ? "Verify your email to secure your account."
-            : "Create your password so you can log in on any device."}
+            : mode === "signup"
+            ? signupStep === 1
+              ? "Enter your basic details to get started. No full forms required."
+              : signupStep === 2
+              ? "Verify your email to secure your account."
+              : "Create your password so you can log in on any device."
+            : resetStep === 1
+            ? "Enter your registered email address to receive an 8-digit verification code."
+            : resetStep === 2
+            ? `Enter the 8-digit verification code sent to ${email.trim()}.`
+            : "Enter and re-type your new password to secure your account."}
         </p>
       </div>
 
@@ -541,11 +760,7 @@ export function AuthView({
               <label htmlFor="login-password">Password</label>
               <button
                 type="button"
-                onClick={() => {
-                  switchMode("signup");
-                  setSignupStep(1);
-                  setInfo("Enter your email to verify and reset your account.");
-                }}
+                onClick={() => switchMode("reset")}
                 className="text-xs font-semibold text-accent hover:underline"
               >
                 Forgot password?
@@ -889,6 +1104,258 @@ export function AuthView({
               >
                 {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
                 {busy ? "Finishing setup…" : "Complete registration & log in"}
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+
+      {/* ─────────────────── RESET PASSWORD FLOW ─────────────────── */}
+      {mode === "reset" && (
+        <div>
+          {/* Step indicators */}
+          <div className="mb-5 flex items-center justify-between text-xs font-semibold text-faint">
+            <div className={`flex items-center gap-1.5 ${resetStep >= 1 ? "text-text" : ""}`}>
+              <span className={`grid h-5 w-5 place-items-center rounded-full text-[11px] font-bold ${
+                resetStep > 1 ? "bg-ok text-surface" : resetStep === 1 ? "bg-signal text-signal-ink" : "bg-raised text-faint"
+              }`}>
+                {resetStep > 1 ? "✓" : "1"}
+              </span>
+              <span>Email</span>
+            </div>
+            <div className="h-0.5 flex-1 mx-2 bg-line" />
+            <div className={`flex items-center gap-1.5 ${resetStep >= 2 ? "text-text" : ""}`}>
+              <span className={`grid h-5 w-5 place-items-center rounded-full text-[11px] font-bold ${
+                resetStep > 2 ? "bg-ok text-surface" : resetStep === 2 ? "bg-signal text-signal-ink" : "bg-raised text-faint"
+              }`}>
+                {resetStep > 2 ? "✓" : "2"}
+              </span>
+              <span>Verify code</span>
+            </div>
+            <div className="h-0.5 flex-1 mx-2 bg-line" />
+            <div className={`flex items-center gap-1.5 ${resetStep >= 3 ? "text-text" : ""}`}>
+              <span className={`grid h-5 w-5 place-items-center rounded-full text-[11px] font-bold ${
+                resetStep === 3 ? "bg-signal text-signal-ink" : "bg-raised text-faint"
+              }`}>
+                3
+              </span>
+              <span>New password</span>
+            </div>
+          </div>
+
+          {/* Reset Step 1: Email only */}
+          {resetStep === 1 && (
+            <form onSubmit={handleSendResetOtp} className="space-y-4">
+              <div>
+                <label htmlFor="reset-email" className="field-label">Email address</label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden="true" />
+                  <input
+                    id="reset-email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@domain.com"
+                    className="field pl-10"
+                    disabled={busy}
+                    autoFocus
+                  />
+                </div>
+                <p className="mt-1 text-xs text-faint">
+                  We will send an 8-digit verification code to this address.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="btn btn-primary w-full shadow-sm"
+              >
+                {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
+                {busy ? "Sending verification code…" : "Send verification code"}
+              </button>
+
+              <p className="mt-4 text-center text-xs text-dim">
+                Remember your password?{" "}
+                <button
+                  type="button"
+                  onClick={() => switchMode("login")}
+                  className="font-semibold text-accent hover:underline"
+                >
+                  Log in
+                </button>
+              </p>
+            </form>
+          )}
+
+          {/* Reset Step 2: OTP verification */}
+          {resetStep === 2 && (
+            <form onSubmit={handleVerifyResetOtp} className="space-y-4">
+              <div className="rounded-xl border border-line bg-raised/60 p-3 text-sm text-dim">
+                <p className="font-semibold text-text">Verify your email</p>
+                <p className="text-xs text-faint">
+                  Enter the 8-digit code sent to <strong className="text-text">{email}</strong>.
+                </p>
+              </div>
+
+              <div>
+                <label className="field-label text-center mb-2.5">8-Digit Verification Code</label>
+                <div className="flex justify-center gap-1.5 sm:gap-2" onPaste={handleOtpPaste}>
+                  {otp.map((digit, idx) => (
+                    <input
+                      key={idx}
+                      ref={(el) => {
+                        otpInputRefs.current[idx] = el;
+                      }}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleOtpChange(idx, e.target.value)}
+                      onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                      className="h-11 w-8 sm:h-12 sm:w-10 rounded-lg sm:rounded-xl border-2 border-line bg-surface text-center font-mono text-lg sm:text-xl font-bold text-text transition-colors focus:border-text focus:outline-none focus:ring-2 focus:ring-signal"
+                      disabled={busy}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={busy || otp.join("").length !== otpLength}
+                className="btn btn-primary w-full shadow-sm"
+              >
+                {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
+                {busy ? "Verifying…" : "Verify code & continue"}
+              </button>
+
+              <div className="flex items-center justify-between pt-1 text-xs text-dim">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetStep(1);
+                    setOtp(Array(otpLength).fill(""));
+                    setError(null);
+                  }}
+                  className="flex items-center gap-1 text-faint hover:text-text"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Change email
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResendResetOtp}
+                  disabled={resendCooldown > 0 || busy}
+                  className="font-semibold text-accent hover:underline disabled:opacity-50"
+                >
+                  {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Reset Step 3: New Password & Retype Password */}
+          {resetStep === 3 && (
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+              <div className="rounded-xl border border-ok/30 bg-ok/10 p-3 text-sm text-ok">
+                <div className="flex items-center gap-2 font-semibold">
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                  Code verified successfully
+                </div>
+                <p className="mt-0.5 text-xs text-dim">
+                  Now enter and re-type your new password to secure your account.
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="reset-new-password" className="field-label">New password</label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden="true" />
+                  <input
+                    id="reset-new-password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="At least 8 characters"
+                    className="field pl-10 pr-10"
+                    disabled={busy}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-text"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+
+                {/* Password strength indicator */}
+                {password.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    <div className="flex gap-1.5">
+                      <div className={`h-1 flex-1 rounded-full ${passwordStrengthScore >= 1 ? "bg-warn" : "bg-line"}`} />
+                      <div className={`h-1 flex-1 rounded-full ${passwordStrengthScore >= 2 ? "bg-signal" : "bg-line"}`} />
+                      <div className={`h-1 flex-1 rounded-full ${passwordStrengthScore >= 3 ? "bg-ok" : "bg-line"}`} />
+                    </div>
+                    <p className="text-[11px] text-faint">
+                      {passwordStrengthScore === 1
+                        ? "Weak password"
+                        : passwordStrengthScore === 2
+                        ? "Moderate password"
+                        : "Strong password"}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="reset-confirm-password" className="field-label">Re-type new password</label>
+                <div className="relative">
+                  <KeyRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden="true" />
+                  <input
+                    id="reset-confirm-password"
+                    type={showConfirmPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter your new password"
+                    className="field pl-10 pr-10"
+                    disabled={busy}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-text"
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {confirmPassword.length > 0 && password !== confirmPassword && (
+                  <p className="mt-1 text-xs text-bad">Passwords do not match.</p>
+                )}
+                {confirmPassword.length > 0 && password === confirmPassword && (
+                  <p className="mt-1 text-xs text-ok flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Passwords match!
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="btn btn-primary w-full shadow-sm"
+              >
+                {busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
+                {busy ? "Saving password…" : "Save password & log in"}
               </button>
             </form>
           )}

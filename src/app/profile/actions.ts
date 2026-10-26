@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { list, validateProfile } from "@/lib/profile";
+import { processAutoRegistrationsForUser } from "@/lib/auto-register";
 
 const back = (q: string) => redirect(`/profile?${q}`);
 
@@ -11,6 +12,10 @@ export async function saveProfile(form: FormData) {
   const [values, error] = validateProfile(form);
   if (error) back(`error=${encodeURIComponent(error)}`);
   const { error: dbError } = await supabase.from("profiles").update(values).eq("user_id", user.id);
+  if (!dbError) {
+    // If auto_register is active, immediately start registering matching events with newly saved account details
+    await processAutoRegistrationsForUser(user.id, supabase).catch(() => null);
+  }
   back(dbError ? `error=${encodeURIComponent("Could not save profile")}` : "saved=profile");
 }
 
@@ -20,6 +25,9 @@ export async function savePreferences(form: FormData) {
   if (maxFee && !(Number(maxFee) >= 0)) back(`error=${encodeURIComponent("Max fee must be 0 or more")}`);
   const formats = form.getAll("formats").map(String).filter((f) => ["online", "in_person", "hybrid"].includes(f));
   const on = (k: string) => form.get(k) === "on";
+  const autoRegister = on("auto_register");
+  const notifyPaid = form.get("notify_paid") === null ? true : on("notify_paid");
+
   const { error } = await supabase
     .from("user_preferences")
     .update({
@@ -34,8 +42,16 @@ export async function savePreferences(form: FormData) {
       alert_deadline_reminder: on("alert_deadline_reminder"),
       alert_availability_changed: on("alert_availability_changed"),
       email_alerts: on("email_alerts"),
+      auto_register: autoRegister,
+      notify_paid: notifyPaid,
     })
     .eq("user_id", user.id);
+
+  if (!error && autoRegister) {
+    // Automatically prepare registrations for matching free events
+    await processAutoRegistrationsForUser(user.id, supabase).catch(() => null);
+  }
+
   back(error ? `error=${encodeURIComponent("Could not save preferences")}` : "saved=preferences");
 }
 

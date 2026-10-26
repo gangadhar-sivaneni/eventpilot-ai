@@ -14,9 +14,9 @@ const STEPS = ["Prepared", "Your review", "Submitted", "Confirmed"];
 const STEP_OF: Record<string, number> = { not_started: -1, prepared: 0, awaiting_approval: 1, submitted: 2, unknown: 2, failed: 0, confirmed: 3 };
 
 const NEXT_STEP: Record<string, string> = {
-  not_started: "Click 'Prepare with Agent' to analyze the form and map your profile details.",
-  prepared: "The agent stopped on questions it would not guess. Answer the flagged fields below, or update saved answers and prepare again.",
-  awaiting_approval: "Review every proposed answer below. Approve only if all fields are accurate.",
+  not_started: "Click 'Auto-Register with Agent' to fill and confirm your registration.",
+  prepared: "Missing required details. Fill in the flagged fields below to complete your registration.",
+  awaiting_approval: "Review and approve to finalize your registration.",
   submitted: "Submitted to official portal. Waiting for confirmation signal.",
   confirmed: "Registration confirmed and verified. Keep the application reference below.",
   failed: "The attempt failed. Review the error details below, adjust answers, and prepare again.",
@@ -43,7 +43,7 @@ export default async function RegistrationsPage() {
   return (
     <div className="shell py-10">
       <PageHeader eyebrow="Agent" title="Registrations">
-        The agent prepares, you approve, and only a real confirmation counts as success.
+        The agent auto-registers you for matching events. If any required details are missing, the agent drafts the form and notifies you immediately.
       </PageHeader>
 
       <div className="mt-8 space-y-6">
@@ -103,17 +103,18 @@ export default async function RegistrationsPage() {
                   <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-raised/50 p-4">
                     <form action={runPreparation}>
                       <input type="hidden" name="id" value={r.id} />
-                      <SubmitButton className="btn btn-primary" pendingText="Preparing form…">
-                        <Bot className="h-4 w-4" aria-hidden="true" /> Prepare with Agent
+                      <SubmitButton className="btn btn-primary" pendingText="Auto-registering…">
+                        <Bot className="h-4 w-4" aria-hidden="true" /> Auto-Register with Agent
                       </SubmitButton>
                     </form>
-                    <p className="text-xs text-faint">Agent reads form fields and fills verified answers from your profile.</p>
+                    <p className="text-xs text-faint">Agent fills verified answers from your profile and registers immediately.</p>
                   </div>
                 )}
 
                 {blocking.length > 0 && (
                   <div className="rounded-xl border border-warn/30 bg-warn/5 p-4">
-                    <p className="flex items-center gap-2 font-medium text-warn"><CircleAlert className="h-4 w-4" aria-hidden="true" /> Needs your review before approval</p>
+                    <p className="flex items-center gap-2 font-medium text-warn"><CircleAlert className="h-4 w-4" aria-hidden="true" /> Action Required: Missing Information</p>
+                    <p className="mt-1 text-xs text-dim">The agent cannot complete your registration until the following details are provided. Fill them in below or update your profile:</p>
                     <ul className="mt-2 list-disc space-y-1 pl-6 text-sm text-dim">{blocking.map((u) => <li key={u}>{u}</li>)}</ul>
                   </div>
                 )}

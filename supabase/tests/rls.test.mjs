@@ -4,6 +4,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { readFileSync } from "node:fs";
 
 const migration = readFileSync(new URL("../migrations/20261018000000_init.sql", import.meta.url), "utf8");
+const autoRegMigration = readFileSync(new URL("../migrations/20261026000000_auto_registration.sql", import.meta.url), "utf8");
 const db = new PGlite();
 
 await db.exec(`
@@ -23,6 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 `);
 await db.exec(migration);
+await db.exec(autoRegMigration);
 console.log("migration applied OK");
 
 const A = "00000000-0000-0000-0000-00000000000a", B = "00000000-0000-0000-0000-00000000000b";

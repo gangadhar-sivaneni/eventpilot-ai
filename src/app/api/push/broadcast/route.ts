@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, ...result });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Push broadcast error:", err);
+    return NextResponse.json({ error: "Failed to broadcast notification" }, { status: 500 });
   }
 }
