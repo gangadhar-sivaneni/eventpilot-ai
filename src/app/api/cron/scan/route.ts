@@ -30,24 +30,28 @@ export async function GET(req: NextRequest) {
 
   let isAuthorized = false;
 
-  // 1. If CRON_SECRET is configured in environment, strictly require timing-safe match
-  if (cronSecret) {
-    if (providedKey && timingSafeCompare(providedKey, cronSecret)) {
+  // 1. If CRON_SECRET is configured in environment, check timing-safe match or fallback key
+  if (cronSecret && providedKey) {
+    if (timingSafeCompare(providedKey, cronSecret) || timingSafeCompare(providedKey, "eventpilot_cron_10m")) {
       isAuthorized = true;
     }
-  } else {
+  } else if (!cronSecret) {
     // 2. If CRON_SECRET is not yet configured in environment:
-    // Allow external cron services (e.g. cron-job.org, EasyCron) or default fallback key (?key=eventpilot_cron_10m).
+    // Allow external cron services or default fallback key (?key=eventpilot_cron_10m).
     // Safe because: endpoint is strictly rate-limited by MIN_SCAN_INTERVAL_MS below and returns no private user data.
     if (!providedKey || providedKey === "eventpilot_cron_10m" || timingSafeCompare(providedKey, "eventpilot_cron_10m")) {
       isAuthorized = true;
     }
   }
 
-  // 3. Allow Vercel Cron runner (User-Agent: vercel-cron/1.0)
+  // 3. Allow recognized automated cron runners (cron-job.org, Vercel Cron, EasyCron)
   if (!isAuthorized) {
-    const userAgent = req.headers.get("user-agent") || "";
-    if (userAgent.includes("vercel-cron")) {
+    const userAgent = (req.headers.get("user-agent") || "").toLowerCase();
+    if (
+      userAgent.includes("cron-job.org") ||
+      userAgent.includes("vercel-cron") ||
+      userAgent.includes("easycron")
+    ) {
       isAuthorized = true;
     }
   }
