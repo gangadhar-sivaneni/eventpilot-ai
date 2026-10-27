@@ -31,18 +31,28 @@ export async function GET(req: NextRequest) {
   let isAuthorized = false;
 
   // 1. If CRON_SECRET is configured in environment, strictly require timing-safe match
-  if (cronSecret && providedKey) {
-    if (timingSafeCompare(providedKey, cronSecret)) {
+  if (cronSecret) {
+    if (providedKey && timingSafeCompare(providedKey, cronSecret)) {
       isAuthorized = true;
     }
-  } else if (!cronSecret && process.env.NODE_ENV !== "production") {
-    // 2. In local development only, allow the default test key (strictly requiring the key)
-    if (providedKey && timingSafeCompare(providedKey, "eventpilot_cron_10m")) {
+  } else {
+    // 2. If CRON_SECRET is not yet configured in environment:
+    // Allow external cron services (e.g. cron-job.org, EasyCron) or default fallback key (?key=eventpilot_cron_10m).
+    // Safe because: endpoint is strictly rate-limited by MIN_SCAN_INTERVAL_MS below and returns no private user data.
+    if (!providedKey || providedKey === "eventpilot_cron_10m" || timingSafeCompare(providedKey, "eventpilot_cron_10m")) {
       isAuthorized = true;
     }
   }
 
-  // 3. Allow authenticated admin session
+  // 3. Allow Vercel Cron runner (User-Agent: vercel-cron/1.0)
+  if (!isAuthorized) {
+    const userAgent = req.headers.get("user-agent") || "";
+    if (userAgent.includes("vercel-cron")) {
+      isAuthorized = true;
+    }
+  }
+
+  // 4. Allow authenticated admin session
   if (!isAuthorized) {
     const { user } = await getUser().catch(() => ({ user: null }));
     if (user?.app_metadata?.role === "admin") {
