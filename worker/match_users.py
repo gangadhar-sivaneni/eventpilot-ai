@@ -7,10 +7,13 @@ import random
 import re
 from datetime import datetime, timedelta
 
+from postgrest.exceptions import APIError
+
 import db
 
 FIRST_RUN_LOOKBACK = timedelta(days=1)
 REMINDER_WINDOW = timedelta(hours=24)
+INIT_ALERT_TYPES = {"new_event", "registration_opened", "deadline_reminder", "availability_changed"}  # 20261018 check constraint
 
 
 def matches(prefs: dict, e: dict, now: datetime) -> bool:
@@ -54,6 +57,16 @@ def alert(user_id: str, e: dict, kind: str) -> dict:
         "missing_info": f"⚠️ Action Required for {e['title']}: Missing details to finish registration. Tap to complete!",
     }[kind]
     return {"user_id": user_id, "event_id": e["id"], "alert_type": kind, "message": text}
+
+
+def downgrade(batch: list[dict]) -> list[dict]:
+    """Alert types the original check constraint accepts, so a match is never lost to a pending migration."""
+    return [a if a["alert_type"] in INIT_ALERT_TYPES else {**a, "alert_type": "new_event"} for a in batch]
+
+
+def save_alerts(client, batch: list[dict]) -> None:
+    client.table("event_alerts").upsert(batch, on_conflict="user_id,event_id,alert_type",
+                                        ignore_duplicates=True, returning="minimal").execute()
 
 
 def build_alerts(prefs_list, new_events, changed_events, closing_events, interested: dict[int, set[str]], now) -> list[dict]:
@@ -119,8 +132,14 @@ def main() -> None:
 
         alerts = build_alerts(prefs, new_events, changed, closing, interested, now)
         for batch in db.chunks(alerts, 500):
-            client.table("event_alerts").upsert(batch, on_conflict="user_id,event_id,alert_type",
-                                                ignore_duplicates=True, returning="minimal").execute()
+            try:
+                save_alerts(client, batch)
+            except APIError as err:
+                if err.code != "23514":  # check_violation: the live DB predates 20261026000000_auto_registration.sql
+                    raise
+                print("::warning title=Migration missing::event_alerts rejects new alert types; run "
+                      "supabase/migrations/20261026000000_auto_registration.sql. Saving them as new_event meanwhile.")
+                save_alerts(client, downgrade(batch))
 
         # Autonomous registration for users with auto_register enabled
         auto_registered_count = 0

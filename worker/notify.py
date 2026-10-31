@@ -19,7 +19,7 @@ def digest(alerts: list[dict], site_url: str) -> str:
     lines = []
     for a in sorted(alerts, key=lambda a: a["alert_type"] != "deadline_reminder"):  # urgent first
         ev = a.get("events") or {}
-        lines.append(f"[{TYPE_LABEL[a['alert_type']]}] {a['message']}\n   {site_url}/events/{a['event_id']}"
+        lines.append(f"[{TYPE_LABEL.get(a['alert_type'], 'Alert')}] {a['message']}\n   {site_url}/events/{a['event_id']}"
                      + (f"\n   Official page: {ev['url']}" if ev.get("url") else ""))
     return ("\n\n".join(lines) + f"\n\nAll alerts: {site_url}/alerts\n"
             f"Turn email off: {site_url}/profile (Interests and alerts)\n")

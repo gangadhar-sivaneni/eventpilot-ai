@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from match_users import build_alerts, matches
+from match_users import build_alerts, downgrade, matches
 
 NOW = datetime(2026, 10, 18, tzinfo=timezone.utc)
 PREFS = {"user_id": "u1", "categories": [], "countries": [], "cities": [], "formats": [], "max_fee": None, "prize_only": False,
@@ -52,3 +52,10 @@ def test_auto_registration_and_paid_alerts():
     alerts_no_paid = build_alerts([no_paid_prefs], [free_ev, paid_ev], [], [], {}, NOW)
     kinds_no_paid = {(a["event_id"], a["alert_type"]) for a in alerts_no_paid}
     assert kinds_no_paid == {(10, "auto_registered")}
+
+
+def test_downgrade_keeps_alerts_the_old_constraint_accepts():
+    batch = [{"user_id": "u1", "event_id": 1, "alert_type": "paid_event_review", "message": "m"},
+             {"user_id": "u1", "event_id": 2, "alert_type": "deadline_reminder", "message": "m"}]
+    assert [a["alert_type"] for a in downgrade(batch)] == ["new_event", "deadline_reminder"]
+    assert batch[0]["alert_type"] == "paid_event_review"  # input untouched
