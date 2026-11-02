@@ -40,6 +40,7 @@ jobs:
         if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != ''
       - run: pytest -q
         if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != ''
+        continue-on-error: true  # ci.yml gates code on push; a test must never stop live discovery
       - run: python -m pip_audit -r requirements.txt
         if: env.SUPABASE_URL != '' && env.SUPABASE_SECRET_KEY != ''
         continue-on-error: true

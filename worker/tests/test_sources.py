@@ -1,6 +1,8 @@
 """Source parsers against trimmed real responses (captured 2026-10-18)."""
-from datetime import datetime
+from datetime import datetime, timezone
 
+import pytest
+import scrapers
 from bs4 import BeautifulSoup
 from scrapers import (
     college_rss,
@@ -15,6 +17,17 @@ from scrapers import (
     unstop,
 )
 
+
+class CaptureDay(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return datetime(2026, 10, 18, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def capture_day_clock(monkeypatch):
+    """Parsers drop ended events; pin the clock so the captured samples never expire."""
+    monkeypatch.setattr(scrapers, "datetime", CaptureDay)
 
 
 def test_devpost_parse_does_not_promote_submission_dates_to_event_dates():
